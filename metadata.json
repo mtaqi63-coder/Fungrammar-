@@ -1,0 +1,6 @@
+{
+  "name": "Fun Grammar - القواعد المرحة",
+  "description": "Interactive English sentence-building board game based on Fun Grammar (القواعد المرحة) by Dr. Mohammed Taqi Alkhonaizi. Form grammatically valid intersecting sentences, score by character counts, and learn English grammar.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
