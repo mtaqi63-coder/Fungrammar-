@@ -18,8 +18,9 @@ import { WildcardModal } from './components/WildcardModal';
 import { DemonstrationModal } from './components/DemonstrationModal';
 import { GameManualPdfModal } from './components/GameManualPdfModal';
 import { MediaKitModal } from './components/MediaKitModal';
+import { StoryAndGuideModal } from './components/StoryAndGuideModal';
 import { PlayedSentencesLog } from './components/PlayedSentencesLog';
-import { Trophy, RefreshCw, Mail, Clock, Download, ArrowRightLeft, PlayCircle, Globe, Image as ImageIcon } from 'lucide-react';
+import { Trophy, RefreshCw, Mail, Clock, Download, ArrowRightLeft, PlayCircle, Globe, Image as ImageIcon, ScrollText } from 'lucide-react';
 import { useWorldwideVisits } from './utils/visitorCounter';
 
 export default function App() {
@@ -42,6 +43,7 @@ export default function App() {
   const [isDemoOpen, setIsDemoOpen] = useState(false);
   const [isManualPdfOpen, setIsManualPdfOpen] = useState(false);
   const [isMediaKitOpen, setIsMediaKitOpen] = useState(false);
+  const [isStoryOpen, setIsStoryOpen] = useState(false);
   const [wildcardTile, setWildcardTile] = useState<TileData | null>(null);
 
   // Board Expansion (Grid expands up to 20x20)
@@ -717,7 +719,7 @@ export default function App() {
   const handleDownloadZip = async (e: React.MouseEvent) => {
     e.preventDefault();
     try {
-      const response = await fetch('/fun-grammar-game.zip');
+      const response = await fetch('./fun-grammar-game.zip');
       const blob = await response.blob();
       const zipBlob = new Blob([blob], { type: 'application/zip' });
       const blobUrl = window.URL.createObjectURL(zipBlob);
@@ -730,7 +732,7 @@ export default function App() {
       setTimeout(() => window.URL.revokeObjectURL(blobUrl), 1500);
     } catch (err) {
       const link = document.createElement('a');
-      link.href = '/fun-grammar-game.zip';
+      link.href = './fun-grammar-game.zip';
       link.download = 'fun-grammar-game.zip';
       document.body.appendChild(link);
       link.click();
@@ -755,6 +757,7 @@ export default function App() {
         onOpenSampleBoard={() => setIsSampleBoardOpen(true)}
         onOpenManualPdf={() => setIsManualPdfOpen(true)}
         onOpenMediaKit={() => setIsMediaKitOpen(true)}
+        onOpenStory={() => setIsStoryOpen(true)}
         onRestartGame={() => startNewGame(gameMode)}
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
@@ -909,8 +912,17 @@ export default function App() {
             </span>
           </div>
 
-          {/* Download Game ZIP & Media Kit Buttons */}
+          {/* Download Game ZIP, Story & Media Kit Buttons */}
           <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              onClick={() => setIsStoryOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition-all transform hover:scale-105 active:scale-95"
+              title={isAr ? 'قراءة وتنزيل قصة اللعبة وشرحها الكامل' : 'Read & download the game story and complete explanation'}
+            >
+              <ScrollText className="w-3.5 h-3.5" />
+              <span>{isAr ? 'قصة اللعبة وشرحها' : 'Game Story & Guide'}</span>
+            </button>
+
             <button
               onClick={() => setIsMediaKitOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all transform hover:scale-105 active:scale-95"
@@ -921,7 +933,7 @@ export default function App() {
             </button>
 
             <a
-              href="/fun-grammar-game.zip"
+              href="./fun-grammar-game.zip"
               download="fun-grammar-game.zip"
               onClick={handleDownloadZip}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md transition-all transform hover:scale-105 active:scale-95"
@@ -1042,6 +1054,13 @@ export default function App() {
       <MediaKitModal
         isOpen={isMediaKitOpen}
         onClose={() => setIsMediaKitOpen(false)}
+        language={language}
+      />
+
+      {/* Game Story & Complete Explanation Modal (Downloadable) */}
+      <StoryAndGuideModal
+        isOpen={isStoryOpen}
+        onClose={() => setIsStoryOpen(false)}
         language={language}
       />
     </div>

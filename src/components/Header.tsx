@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, VolumeX, BookOpen, Sparkles, RotateCcw, LayoutGrid, FileText, Play, Image as ImageIcon } from 'lucide-react';
+import { Volume2, VolumeX, BookOpen, Sparkles, RotateCcw, LayoutGrid, FileText, Play, Image as ImageIcon, ScrollText } from 'lucide-react';
 import { GameMode } from '../types/game';
 
 interface HeaderProps {
@@ -11,6 +11,7 @@ interface HeaderProps {
   onOpenSampleBoard: () => void;
   onOpenManualPdf: () => void;
   onOpenMediaKit: () => void;
+  onOpenStory: () => void;
   onRestartGame: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
@@ -27,6 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSampleBoard,
   onOpenManualPdf,
   onOpenMediaKit,
+  onOpenStory,
   onRestartGame,
   soundEnabled,
   onToggleSound,
@@ -93,6 +95,14 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <FileText className="w-4 h-4 text-indigo-400 group-hover:text-white" />
             <span>{isAr ? 'وصف PDF' : 'PDF Manual'}</span>
+          </button>
+
+          <button
+            onClick={onOpenStory}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-rose-500/20 hover:bg-rose-500 text-rose-300 hover:text-white border border-rose-500/40 transition-all whitespace-nowrap font-semibold shadow-sm"
+          >
+            <ScrollText className="w-4 h-4" />
+            <span>{isAr ? 'قصة اللعبة وشرحها' : 'Story & Guide'}</span>
           </button>
 
           <button
@@ -179,6 +189,10 @@ export const Header: React.FC<HeaderProps> = ({
         <button onClick={onOpenRules} className="flex items-center gap-1 hover:text-white py-1 px-1.5 shrink-0">
           <BookOpen className="w-3.5 h-3.5 text-blue-400" />
           <span>{isAr ? 'القواعد' : 'Rules'}</span>
+        </button>
+        <button onClick={onOpenStory} className="flex items-center gap-1 text-rose-300 hover:text-white py-1 px-1.5 font-semibold shrink-0">
+          <ScrollText className="w-3.5 h-3.5 text-rose-400" />
+          <span>{isAr ? 'القصة' : 'Story'}</span>
         </button>
         <button onClick={onOpenMediaKit} className="flex items-center gap-1 text-amber-300 hover:text-white py-1 px-1.5 font-semibold shrink-0">
           <ImageIcon className="w-3.5 h-3.5 text-amber-400" />

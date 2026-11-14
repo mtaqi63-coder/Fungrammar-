@@ -240,7 +240,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose, languag
               </div>
               <div className="relative rounded-xl overflow-hidden border border-slate-700 shadow-2xl bg-black">
                 <img
-                  src="/assets/aistudio/20261022_230101_288b1234.jpg"
+                  src="./assets/aistudio/20261022_230101_288b1234.jpg"
                   alt="Original Fun Grammar Board and Rules"
                   className="max-h-[60vh] object-contain rounded-xl"
                   referrerPolicy="no-referrer"
@@ -258,7 +258,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose, languag
               </div>
               <div className="relative rounded-xl overflow-hidden border border-slate-700 shadow-2xl bg-black">
                 <img
-                  src="/assets/aistudio/20261022_230037_2fd1ca63.jpg"
+                  src="./assets/aistudio/20261022_230037_2fd1ca63.jpg"
                   alt="Original Fun Grammar Tiles and Racks"
                   className="max-h-[60vh] object-contain rounded-xl"
                   referrerPolicy="no-referrer"
