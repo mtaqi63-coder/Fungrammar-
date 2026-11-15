@@ -11,6 +11,8 @@ interface ScoreBoardProps {
   isAutoExpandMode?: boolean;
   onToggleExpand?: () => void;
   turnTimeLeft?: number;
+  bankRef?: React.RefObject<HTMLDivElement | null>;
+  isDealing?: boolean;
 }
 
 export const ScoreBoard: React.FC<ScoreBoardProps> = ({
@@ -22,6 +24,8 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
   isAutoExpandMode = true,
   onToggleExpand,
   turnTimeLeft,
+  bankRef,
+  isDealing = false,
 }) => {
   const isAr = language === 'ar';
 
@@ -97,8 +101,15 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
         {/* Bank & Expanding Control */}
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           {/* Bank Counter Window */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800/70 border border-slate-700 text-xs text-slate-300">
-            <Layers className="w-4 h-4 text-cyan-400" />
+          <div
+            ref={bankRef}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-all ${
+              isDealing
+                ? 'bg-cyan-950/90 border-cyan-400 text-cyan-100 shadow-lg ring-2 ring-cyan-400/50 scale-105'
+                : 'bg-slate-800/70 border-slate-700 text-slate-300'
+            }`}
+          >
+            <Layers className={`w-4 h-4 text-cyan-400 ${isDealing ? 'animate-pulse' : ''}`} />
             <span className="font-medium">{isAr ? 'بنك الكلمات:' : 'Word Bank:'}</span>
             <span className="font-mono font-bold text-cyan-300 tabular-nums">{bankCount}</span>
             <span className="text-[10px] text-slate-400">/ 100</span>

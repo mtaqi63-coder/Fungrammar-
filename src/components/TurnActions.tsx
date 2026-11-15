@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, AlertCircle, CheckCircle2, Clock, ArrowRightLeft, RotateCcw, Globe } from 'lucide-react';
+import { Check, AlertCircle, CheckCircle2, Clock, ArrowRightLeft, RotateCcw } from 'lucide-react';
 import { MoveValidation, TileData } from '../types/game';
 
 interface TurnActionsProps {
@@ -11,7 +11,6 @@ interface TurnActionsProps {
   disabled?: boolean;
   language: 'en' | 'ar';
   turnTimeLeft?: number;
-  worldwideVisits?: number | null;
 
   // Recall placed tiles
   onRecallAll?: () => void;
@@ -33,7 +32,6 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
   disabled = false,
   language,
   turnTimeLeft,
-  worldwideVisits,
   onRecallAll,
   selectedTile,
   isExchangeMode = false,
@@ -90,9 +88,9 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
         </div>
       )}
 
-      {/* Unified Single Line: Timer + Worldwide Visits Counter + Exchange + Play */}
+      {/* Unified Single Line: Timer + Exchange + Play */}
       <div className="w-full flex items-center justify-between gap-2">
-        {/* Left: Turn Countdown Timer & Worldwide Visits Counter */}
+        {/* Left: Turn Countdown Timer */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {turnTimeLeft !== undefined && !disabled ? (
             <div
@@ -112,24 +110,6 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
             </div>
           ) : (
             <div className="w-10 sm:w-14" />
-          )}
-
-          {/* Worldwide Visits Counter */}
-          {worldwideVisits !== undefined && worldwideVisits !== null && (
-            <div
-              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800/85 hover:bg-slate-800 border border-slate-700/80 text-xs font-medium text-slate-300 shadow-sm shrink-0 transition-colors"
-              title={
-                isAr
-                  ? 'عدد مرات زيارة وتصفح اللعبة حول العالم'
-                  : 'Total number of times the game page is visited worldwide'
-              }
-            >
-              <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="hidden sm:inline">{isAr ? 'الزيارات:' : 'Visits:'}</span>
-              <span className="font-mono font-extrabold text-cyan-300 text-xs sm:text-sm">
-                {worldwideVisits.toLocaleString()}
-              </span>
-            </div>
           )}
         </div>
 

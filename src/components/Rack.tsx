@@ -18,6 +18,11 @@ interface RackProps {
   onOpenWildcardModal: (tile: TileData) => void;
   disabled?: boolean;
   language: 'en' | 'ar';
+  rackContainerRef?: React.RefObject<HTMLDivElement | null>;
+  isDealing?: boolean;
+  dealingTotal?: number;
+  newlyArrivedTileId?: string | null;
+  onSkipDeal?: () => void;
 }
 
 export const Rack: React.FC<RackProps> = ({
@@ -35,9 +40,21 @@ export const Rack: React.FC<RackProps> = ({
   onOpenWildcardModal,
   disabled = false,
   language,
+  rackContainerRef,
+  isDealing = false,
+  dealingTotal = 10,
+  newlyArrivedTileId = null,
+  onSkipDeal,
 }) => {
   const isAr = language === 'ar';
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const setTrackRef = (el: HTMLDivElement | null) => {
+    scrollRef.current = el;
+    if (rackContainerRef) {
+      rackContainerRef.current = el;
+    }
+  };
 
   const handleScrollLeft = () => {
     if (scrollRef.current) {
@@ -59,7 +76,25 @@ export const Rack: React.FC<RackProps> = ({
           <span className="font-semibold text-slate-300">
             {isAr ? 'حامل كلماتك (10 كلمات):' : 'Your 10-Word Rack:'}
           </span>
-          {!selectedTile && !hasTempTiles && !disabled && (
+          {isDealing && (
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-200 border border-cyan-400/50 font-bold text-[10px] animate-pulse">
+                {isAr
+                  ? `جارٍ نقل الكلمات ببطء من البنك إلى لوحتك (${rack.length}/${dealingTotal})...`
+                  : `Transferring words from Bank to your rack (${rack.length}/${dealingTotal})...`}
+              </span>
+              {onSkipDeal && (
+                <button
+                  type="button"
+                  onClick={onSkipDeal}
+                  className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 text-[10px] font-semibold transition-colors"
+                >
+                  {isAr ? 'تخطي' : 'Skip'}
+                </button>
+              )}
+            </div>
+          )}
+          {!isDealing && !selectedTile && !hasTempTiles && !disabled && (
             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold text-[10px] animate-pulse flex items-center gap-1">
               <span>👆</span>
               <span>{isAr ? 'الخطوة 1: اضغط على كلمة لاختيارها' : 'Step 1: Hit a tile here to pick it'}</span>
@@ -95,12 +130,15 @@ export const Rack: React.FC<RackProps> = ({
 
         {/* Scrollable Tile Track (modeled after the white plastic rack strip) */}
         <div
-          ref={scrollRef}
-          className="flex-1 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 border-2 border-slate-300 rounded-xl p-2 sm:p-2.5 shadow-xl flex items-center justify-start sm:justify-center gap-2 overflow-x-auto scroll-smooth min-h-[64px]"
+          ref={setTrackRef}
+          className={`flex-1 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 border-2 rounded-xl p-2 sm:p-2.5 shadow-xl flex items-center justify-start sm:justify-center gap-2 overflow-x-auto scroll-smooth min-h-[64px] transition-colors ${
+            isDealing ? 'border-cyan-400 ring-2 ring-cyan-400/40' : 'border-slate-300'
+          }`}
         >
           {rack.map((tile, idx) => {
             const isSelected = selectedTile?.id === tile.id;
             const isMarkedExchange = selectedForExchange.includes(tile.id);
+            const isJustArrived = newlyArrivedTileId === tile.id;
 
             return (
               <div
@@ -116,11 +154,13 @@ export const Rack: React.FC<RackProps> = ({
                     onSelectTile(tile);
                   }
                 }}
-                className={`relative flex-shrink-0 w-13 h-13 sm:w-14 sm:h-14 rounded-lg flex flex-col items-center justify-center p-1 cursor-pointer transition-all ${
+                className={`relative flex-shrink-0 w-13 h-13 sm:w-14 sm:h-14 rounded-lg flex flex-col items-center justify-center p-1 cursor-pointer transition-all duration-300 ${
                   isMarkedExchange
                     ? 'bg-rose-600 border-2 border-rose-300 text-white transform scale-95 shadow-inner'
                     : isSelected
                     ? 'bg-blue-600 border-2 border-amber-300 text-white transform -translate-y-2 shadow-2xl ring-4 ring-amber-400/50'
+                    : isJustArrived
+                    ? 'bg-blue-600 border-2 border-cyan-300 text-white scale-110 -translate-y-1 shadow-xl ring-4 ring-cyan-400/60'
                     : 'bg-blue-700 hover:bg-blue-600 border border-blue-500 text-white shadow-md hover:-translate-y-0.5'
                 } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -169,7 +209,13 @@ export const Rack: React.FC<RackProps> = ({
 
           {rack.length === 0 && (
             <div className="text-xs text-slate-500 italic py-2 mx-auto">
-              {isAr ? 'الحامل فارغ، جار السحب من البنك...' : 'Rack empty, drawing from bank...'}
+              {isDealing
+                ? isAr
+                  ? 'جارٍ سحب الكلمات من البنك...'
+                  : 'Drawing words from the Bank...'
+                : isAr
+                ? 'الحامل فارغ، جار السحب من البنك...'
+                : 'Rack empty, drawing from bank...'}
             </div>
           )}
         </div>

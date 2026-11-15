@@ -19,8 +19,9 @@ import { DemonstrationModal } from './components/DemonstrationModal';
 import { GameManualPdfModal } from './components/GameManualPdfModal';
 import { MediaKitModal } from './components/MediaKitModal';
 import { StoryAndGuideModal } from './components/StoryAndGuideModal';
+import { WelcomeScreen } from './components/WelcomeScreen';
 import { PlayedSentencesLog } from './components/PlayedSentencesLog';
-import { Trophy, RefreshCw, Mail, Clock, Download, ArrowRightLeft, PlayCircle, Globe, Image as ImageIcon, ScrollText } from 'lucide-react';
+import { Trophy, RefreshCw, Mail, Clock, Download, ArrowRightLeft, PlayCircle, Globe, Image as ImageIcon, ScrollText, Sparkles } from 'lucide-react';
 import { useWorldwideVisits } from './utils/visitorCounter';
 
 export default function App() {
@@ -35,6 +36,24 @@ export default function App() {
 
   // Worldwide Page Visits Counter (tracked globally across sessions/players)
   const worldwideVisits = useWorldwideVisits();
+
+  // Welcome Screen & Slow Bank-to-Rack Tile Dealing Animation
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [isDealing, setIsDealing] = useState(false);
+  const [pendingDealTotal, setPendingDealTotal] = useState(10);
+  const [newlyArrivedTileId, setNewlyArrivedTileId] = useState<string | null>(null);
+  const [flyingTile, setFlyingTile] = useState<{
+    tile: TileData;
+    fromX: number;
+    fromY: number;
+    toX: number;
+    toY: number;
+    landed: boolean;
+  } | null>(null);
+  const bankRef = useRef<HTMLDivElement | null>(null);
+  const rackContainerRef = useRef<HTMLDivElement | null>(null);
+  const dealSessionRef = useRef(0);
+  const pendingDealTilesRef = useRef<TileData[]>([]);
 
   // Modals
   const [isRulesOpen, setIsRulesOpen] = useState(false);
@@ -86,94 +105,196 @@ export default function App() {
     setLanguage((prev) => (prev === 'en' ? 'ar' : 'en'));
   };
 
-  // Start / Reset Game
-  const startNewGame = useCallback((mode: GameMode = gameMode) => {
-    const newBank = createNewTileBank();
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-    let initialPlayers: Player[] = [];
-    if (mode === 'vs_ai') {
-      initialPlayers = [
-        {
-          id: 'p1',
-          name: 'Player 1',
-          nameAr: 'اللاعب 1',
-          isAi: false,
-          score: 0,
-          rack: newBank.splice(0, 10),
-          avatarColor: 'blue',
-          sentencesFormed: [],
-        },
-        {
-          id: 'p2',
-          name: 'Computer',
-          nameAr: 'الكمبيوتر',
-          isAi: true,
-          score: 0,
-          rack: newBank.splice(0, 10),
-          avatarColor: 'brown',
-          sentencesFormed: [],
-        },
-      ];
-    } else if (mode === 'pass_and_play') {
-      initialPlayers = [
-        {
-          id: 'p1',
-          name: 'Player 1',
-          nameAr: 'اللاعب 1',
-          isAi: false,
-          score: 0,
-          rack: newBank.splice(0, 10),
-          avatarColor: 'blue',
-          sentencesFormed: [],
-        },
-        {
-          id: 'p2',
-          name: 'Player 2',
-          nameAr: 'اللاعب 2',
-          isAi: false,
-          score: 0,
-          rack: newBank.splice(0, 10),
-          avatarColor: 'emerald',
-          sentencesFormed: [],
-        },
-      ];
-    } else {
-      // Solo Sandbox
-      initialPlayers = [
-        {
-          id: 'p1',
-          name: 'Solo Player',
-          nameAr: 'اللاعب الفردي',
-          isAi: false,
-          score: 0,
-          rack: newBank.splice(0, 10),
-          avatarColor: 'blue',
-          sentencesFormed: [],
-        },
-      ];
+  const runSlowDealAnimation = useCallback(async (tilesToDeal: TileData[], sessionId: number) => {
+    setIsDealing(true);
+    setPendingDealTotal(tilesToDeal.length);
+    pendingDealTilesRef.current = tilesToDeal;
+
+    // Wait briefly so ScoreBoard & Rack DOM elements finish mounting
+    await sleep(320);
+    if (dealSessionRef.current !== sessionId) return;
+
+    for (let i = 0; i < tilesToDeal.length; i++) {
+      if (dealSessionRef.current !== sessionId) return;
+      const tile = tilesToDeal[i];
+
+      const bankRect = bankRef.current?.getBoundingClientRect();
+      const rackRect = rackContainerRef.current?.getBoundingClientRect();
+
+      const fromX = bankRect ? bankRect.left + bankRect.width / 2 - 28 : window.innerWidth * 0.7;
+      const fromY = bankRect ? bankRect.top + bankRect.height / 2 - 28 : 96;
+
+      let toX = window.innerWidth / 2 - 28;
+      let toY = window.innerHeight - 180;
+      if (rackRect) {
+        const slotWidth = 62;
+        const totalWidth = tilesToDeal.length * slotWidth;
+        const startOffset = Math.max(12, (rackRect.width - totalWidth) / 2);
+        toX = Math.min(rackRect.right - 64, rackRect.left + startOffset + i * slotWidth);
+        toY = rackRect.top + (rackRect.height - 56) / 2;
+      }
+
+      setFlyingTile({ tile, fromX, fromY, toX, toY, landed: false });
+
+      // Trigger smooth CSS glide on next paint frame
+      await sleep(35);
+      if (dealSessionRef.current !== sessionId) return;
+      setFlyingTile((prev) => (prev ? { ...prev, landed: true } : null));
+
+      // Wait for slow glide from Bank to Rack
+      await sleep(430);
+      if (dealSessionRef.current !== sessionId) return;
+
+      sound.playTilePlace();
+      setFlyingTile(null);
+      setNewlyArrivedTileId(tile.id);
+
+      setPlayers((prev) =>
+        prev.map((p, idx) => {
+          if (idx !== 0) return p;
+          if (p.rack.some((existing) => existing.id === tile.id)) return p;
+          return { ...p, rack: [...p.rack, tile] };
+        })
+      );
+
+      await sleep(110);
     }
 
-    setBank(newBank);
-    setPlayers(initialPlayers);
-    setActivePlayerIndex(0);
-    setBoard(createEmptyBoard());
-    setTempPlacements([]);
-    setSelectedRackTile(null);
-    setIsExchangeMode(false);
-    setSelectedForExchange([]);
-    setConsecutivePasses(0);
-    setIsAiThinking(false);
-    setIsGameOver(false);
-    setLastTurnSentence(null);
-    setTurnTimeLeft(60);
-    setTimeAlert(null);
-    sound.playShuffle();
-  }, [gameMode]);
-
-  // Initial load
-  useEffect(() => {
-    startNewGame(gameMode);
+    if (dealSessionRef.current !== sessionId) return;
+    setNewlyArrivedTileId(null);
+    setIsDealing(false);
+    pendingDealTilesRef.current = [];
   }, []);
+
+  const handleSkipDeal = useCallback(() => {
+    dealSessionRef.current += 1;
+    const remaining = pendingDealTilesRef.current;
+    setFlyingTile(null);
+    setNewlyArrivedTileId(null);
+    setIsDealing(false);
+    if (remaining.length > 0) {
+      setPlayers((prev) =>
+        prev.map((p, idx) => {
+          if (idx !== 0) return p;
+          const existingIds = new Set(p.rack.map((t) => t.id));
+          const missing = remaining.filter((t) => !existingIds.has(t.id));
+          return { ...p, rack: [...p.rack, ...missing] };
+        })
+      );
+      pendingDealTilesRef.current = [];
+    }
+  }, []);
+
+  // Start / Reset Game
+  const startNewGame = useCallback(
+    (mode: GameMode = gameMode, animateDeal = false) => {
+      const sessionId = ++dealSessionRef.current;
+      setFlyingTile(null);
+      setNewlyArrivedTileId(null);
+
+      const newBank = createNewTileBank();
+      const p1Tiles = newBank.splice(0, 10);
+
+      let initialPlayers: Player[] = [];
+      if (mode === 'vs_ai') {
+        initialPlayers = [
+          {
+            id: 'p1',
+            name: 'Player 1',
+            nameAr: 'اللاعب 1',
+            isAi: false,
+            score: 0,
+            rack: animateDeal ? [] : p1Tiles,
+            avatarColor: 'blue',
+            sentencesFormed: [],
+          },
+          {
+            id: 'p2',
+            name: 'Computer',
+            nameAr: 'الكمبيوتر',
+            isAi: true,
+            score: 0,
+            rack: newBank.splice(0, 10),
+            avatarColor: 'brown',
+            sentencesFormed: [],
+          },
+        ];
+      } else if (mode === 'pass_and_play') {
+        initialPlayers = [
+          {
+            id: 'p1',
+            name: 'Player 1',
+            nameAr: 'اللاعب 1',
+            isAi: false,
+            score: 0,
+            rack: animateDeal ? [] : p1Tiles,
+            avatarColor: 'blue',
+            sentencesFormed: [],
+          },
+          {
+            id: 'p2',
+            name: 'Player 2',
+            nameAr: 'اللاعب 2',
+            isAi: false,
+            score: 0,
+            rack: newBank.splice(0, 10),
+            avatarColor: 'emerald',
+            sentencesFormed: [],
+          },
+        ];
+      } else {
+        // Solo Sandbox
+        initialPlayers = [
+          {
+            id: 'p1',
+            name: 'Solo Player',
+            nameAr: 'اللاعب الفردي',
+            isAi: false,
+            score: 0,
+            rack: animateDeal ? [] : p1Tiles,
+            avatarColor: 'blue',
+            sentencesFormed: [],
+          },
+        ];
+      }
+
+      setBank(newBank);
+      setPlayers(initialPlayers);
+      setActivePlayerIndex(0);
+      setBoard(createEmptyBoard());
+      setTempPlacements([]);
+      setSelectedRackTile(null);
+      setIsExchangeMode(false);
+      setSelectedForExchange([]);
+      setConsecutivePasses(0);
+      setIsAiThinking(false);
+      setIsGameOver(false);
+      setLastTurnSentence(null);
+      setTurnTimeLeft(60);
+      setTimeAlert(null);
+
+      if (animateDeal) {
+        sound.playShuffle();
+        runSlowDealAnimation(p1Tiles, sessionId);
+      } else {
+        setIsDealing(false);
+        pendingDealTilesRef.current = [];
+      }
+    },
+    [gameMode, runSlowDealAnimation]
+  );
+
+  // Initial load (behind Welcome Screen)
+  useEffect(() => {
+    startNewGame(gameMode, false);
+  }, []);
+
+  const handleStartFromWelcome = () => {
+    setShowWelcome(false);
+    startNewGame(gameMode, true);
+  };
 
   const activePlayer = players[activePlayerIndex];
 
@@ -555,6 +676,8 @@ export default function App() {
   useEffect(() => {
     const active = players[activePlayerIndex];
     if (
+      showWelcome ||
+      isDealing ||
       !active ||
       active.isAi ||
       isAiThinking ||
@@ -564,6 +687,8 @@ export default function App() {
       isSampleBoardOpen ||
       isDemoOpen ||
       isManualPdfOpen ||
+      isMediaKitOpen ||
+      isStoryOpen ||
       wildcardTile
     ) {
       return;
@@ -582,6 +707,8 @@ export default function App() {
 
     return () => clearInterval(timer);
   }, [
+    showWelcome,
+    isDealing,
     activePlayerIndex,
     players,
     isAiThinking,
@@ -591,6 +718,8 @@ export default function App() {
     isSampleBoardOpen,
     isDemoOpen,
     isManualPdfOpen,
+    isMediaKitOpen,
+    isStoryOpen,
     wildcardTile,
     handleTimeExpired,
   ]);
@@ -741,6 +870,21 @@ export default function App() {
   };
 
   const isAr = language === 'ar';
+  const displayedBankCount = isDealing
+    ? bank.length + Math.max(0, pendingDealTotal - (players[0]?.rack.length ?? 0))
+    : bank.length;
+
+  if (showWelcome) {
+    return (
+      <WelcomeScreen
+        language={language}
+        onToggleLanguage={handleToggleLanguage}
+        gameMode={gameMode}
+        onSelectGameMode={(mode) => setGameMode(mode)}
+        onStartGame={handleStartFromWelcome}
+      />
+    );
+  }
 
   return (
     <div className={`min-h-screen bg-slate-950 text-slate-100 flex flex-col font-['Plus_Jakarta_Sans',sans-serif] ${isAr ? 'rtl' : 'ltr'}`}>
@@ -749,7 +893,7 @@ export default function App() {
         gameMode={gameMode}
         onSelectGameMode={(mode) => {
           setGameMode(mode);
-          startNewGame(mode);
+          startNewGame(mode, true);
         }}
         onOpenDemo={() => setIsDemoOpen(true)}
         onOpenRules={() => setIsRulesOpen(true)}
@@ -758,12 +902,47 @@ export default function App() {
         onOpenManualPdf={() => setIsManualPdfOpen(true)}
         onOpenMediaKit={() => setIsMediaKitOpen(true)}
         onOpenStory={() => setIsStoryOpen(true)}
-        onRestartGame={() => startNewGame(gameMode)}
+        onRestartGame={() => startNewGame(gameMode, true)}
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
         language={language}
         onToggleLanguage={handleToggleLanguage}
       />
+
+      {/* Flying Tile Overlay (Slow Bank -> Rack Transfer) */}
+      {flyingTile && (
+        <div
+          className="fixed top-0 left-0 z-50 pointer-events-none"
+          style={{
+            transform: flyingTile.landed
+              ? `translate3d(${flyingTile.toX}px, ${flyingTile.toY}px, 0) scale(1)`
+              : `translate3d(${flyingTile.fromX}px, ${flyingTile.fromY}px, 0) scale(1.18)`,
+            transition: 'transform 410ms cubic-bezier(0.22, 1, 0.36, 1), opacity 410ms ease',
+          }}
+        >
+          <div className="relative w-14 h-14 rounded-lg bg-gradient-to-b from-blue-500 to-blue-700 border-2 border-cyan-300 text-white shadow-2xl ring-4 ring-cyan-400/50 flex flex-col items-center justify-center p-1">
+            <span
+              className={`font-bold text-center leading-tight px-0.5 ${
+                flyingTile.tile.word.length > 7
+                  ? 'text-[10px]'
+                  : flyingTile.tile.word.length > 4
+                  ? 'text-xs'
+                  : 'text-sm'
+              }`}
+            >
+              {flyingTile.tile.displayWord}
+            </span>
+            {flyingTile.tile.isWildcard && (
+              <span className="absolute top-0.5 left-0.5 text-[8px] font-mono text-amber-300 flex items-center gap-0.5">
+                <Sparkles className="w-2.5 h-2.5" />
+              </span>
+            )}
+            <span className="absolute bottom-0.5 right-1 text-[9px] font-mono font-bold text-cyan-200">
+              {flyingTile.tile.charCount}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Main Game Arena */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 flex flex-col items-center gap-2.5">
@@ -787,12 +966,14 @@ export default function App() {
         <ScoreBoard
           players={players}
           activePlayerIndex={activePlayerIndex}
-          bankCount={bank.length}
+          bankCount={displayedBankCount}
           isAiThinking={isAiThinking}
           language={language}
           isAutoExpandMode={isAutoExpandMode}
           onToggleExpand={() => setIsAutoExpandMode((prev) => !prev)}
           turnTimeLeft={activePlayer && !activePlayer.isAi ? turnTimeLeft : undefined}
+          bankRef={bankRef}
+          isDealing={isDealing}
         />
 
         {/* Board Viewport */}
@@ -841,20 +1022,24 @@ export default function App() {
             }}
             onConfirmExchange={handleConfirmExchange}
             onOpenWildcardModal={(tile) => setWildcardTile(tile)}
-            disabled={activePlayer.isAi || isAiThinking || isGameOver}
+            disabled={activePlayer.isAi || isAiThinking || isGameOver || isDealing}
             language={language}
+            rackContainerRef={rackContainerRef}
+            isDealing={isDealing}
+            dealingTotal={pendingDealTotal}
+            newlyArrivedTileId={newlyArrivedTileId}
+            onSkipDeal={handleSkipDeal}
           />
         )}
 
-        {/* Unified Single-Line Actions: Timer + Worldwide Visits + Exchange + Play */}
+        {/* Unified Single-Line Actions: Timer + Exchange + Play */}
         <TurnActions
           onPlayMove={handlePlayMove}
           validation={currentValidation}
           hasTempTiles={tempPlacements.length > 0}
-          disabled={!activePlayer || activePlayer.isAi || isAiThinking || isGameOver}
+          disabled={!activePlayer || activePlayer.isAi || isAiThinking || isGameOver || isDealing}
           language={language}
           turnTimeLeft={activePlayer && !activePlayer.isAi ? turnTimeLeft : undefined}
-          worldwideVisits={worldwideVisits}
           onRecallAll={handleRecallAll}
           selectedTile={selectedRackTile}
           isExchangeMode={isExchangeMode}
@@ -994,7 +1179,7 @@ export default function App() {
             </div>
 
             <button
-              onClick={() => startNewGame(gameMode)}
+              onClick={() => startNewGame(gameMode, true)}
               className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
             >
               <RefreshCw className="w-4 h-4" />

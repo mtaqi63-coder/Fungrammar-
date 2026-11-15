@@ -29,6 +29,23 @@ export const GAME_STORY_META = {
   registrationEn: 'Kingdom of Bahrain · Ministry of Information Reg. No. 1213 · © 2005',
 };
 
+export const WELCOME_STORY_SHORT = {
+  leadAr:
+    'ابتكر الدكتور محمد تقي الخنيزي لعبة "القواعد المرحة" (Fun Grammar) في مملكة البحرين عام 2005 (رقم الإيداع بوزارة الإعلام: 1213) لتحويل تعلّم قواعد اللغة الإنجليزية من حفظٍ جاف إلى لعبة لوحية مشوّقة.',
+  leadEn:
+    'Created in Bahrain in 2005 by Dr. Mohammed Taqi Alkhonaizi (Ministry of Information Reg. No. 1213), Fun Grammar turns learning English grammar from dry memorization into an engaging board game.',
+  pointsAr: [
+    'الفكرة المبتكرة: بدلاً من الحروف المفردة في سكرابل، يستخدم اللاعبون 100 بطاقة لكلمات إنجليزية كاملة لتكوين جمل صحيحة ومتقاطعة أفقياً ورأسياً.',
+    'احتساب النقاط: تكسب نقطة واحدة مقابل كل حرف في الجملة الصحيحة التي تبنيها على اللوحة.',
+    'من الطاولة إلى العالم: بدأت كلعبة لوحية للمدارس والعائلات، واليوم تنطلق رقمياً بمواجهة الكمبيوتر أو لاعبين مع حكم قواعد فوري.',
+  ],
+  pointsEn: [
+    'Core Twist: Instead of single letters like Scrabble, players use 100 whole English word tiles to build valid intersecting sentences horizontally and vertically.',
+    'Scoring: Earn 1 point for every letter in each grammatically valid sentence formed on the grid.',
+    'Tabletop to Digital: Born as a physical classroom & family board game, now available worldwide with an AI opponent, 2-player mode, and instant grammar validation.',
+  ],
+};
+
 export const STORY_CHAPTERS: StoryChapter[] = [
   {
     id: 1,

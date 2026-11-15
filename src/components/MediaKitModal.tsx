@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { X, Download, Image as ImageIcon, Film, Sparkles, Check, Package } from 'lucide-react';
 
-import coverImg from '../assets/images/fun_grammar_cover_1794647176136.jpg';
-import gameplayImg from '../assets/images/grammar_board_gameplay_1794647177310.jpg';
-import rackImg from '../assets/images/word_rack_tiles_1794647178119.jpg';
-import scoringImg from '../assets/images/grammar_scoring_trophy_1794647178837.jpg';
-import arenaImg from '../assets/images/multiplayer_match_arena_1794647180015.jpg';
+import coverImg from '../assets/images/fun_grammar_cover_sq.png';
+import gameplayImg from '../assets/images/grammar_board_sq.png';
+import rackImg from '../assets/images/word_rack_sq.png';
+import scoringImg from '../assets/images/grammar_scoring_sq.png';
+import arenaImg from '../assets/images/multiplayer_arena_sq.png';
 
 interface MediaKitModalProps {
   isOpen: boolean;
@@ -36,26 +36,26 @@ export const MediaKitModal: React.FC<MediaKitModalProps> = ({ isOpen, onClose, l
     id: 'cover',
     titleEn: 'Official Game Cover',
     titleAr: 'غلاف اللعبة الرسمي',
-    descEn: '16:9 promotional cover artwork ready for game portals (itch.io, CrazyGames, YouTube, etc.).',
-    descAr: 'تصميم غلاف اللعبة الرسمي بدقة عالية (16:9) جاهز للنشر في منصات الألعاب.',
+    descEn: '630×500 PNG promotional cover artwork ready for game portals and social feeds.',
+    descAr: 'تصميم غلاف اللعبة الرسمي بصيغة PNG بمقاس 630×500 بكسل جاهز للنشر في منصات الألعاب.',
     previewSrc: coverImg,
-    downloadUrl: './media/fun-grammar-cover.jpg',
-    fileName: 'fun-grammar-cover.jpg',
-    badgeEn: 'JPG Cover · 16:9',
-    badgeAr: 'غلاف JPG · 16:9',
+    downloadUrl: './media/fun-grammar-cover.png',
+    fileName: 'fun-grammar-cover.png',
+    badgeEn: 'PNG Cover · 630×500',
+    badgeAr: 'غلاف PNG · 630×500',
   };
 
   const gifAsset: MediaAsset = {
     id: 'gif',
     titleEn: 'Animated Game Intro (GIF)',
     titleAr: 'ملف التعريف المتحرك باللعبة (GIF)',
-    descEn: 'Looping animated GIF slideshow introducing Fun Grammar rules, rack, multiplayer & scoring.',
-    descAr: 'ملف GIF متحرك يعرض خطوات اللعب، الحامل، المنافسة، وطريقة احتساب النقاط.',
+    descEn: 'Square 1:1 looping animated GIF slideshow introducing Fun Grammar rules, rack, multiplayer & scoring.',
+    descAr: 'ملف GIF مربع متحرك (1:1) يعرض خطوات اللعب، الحامل، المنافسة، وطريقة احتساب النقاط.',
     previewSrc: './media/fun-grammar-intro.gif',
     downloadUrl: './media/fun-grammar-intro.gif',
     fileName: 'fun-grammar-intro.gif',
-    badgeEn: 'Animated GIF',
-    badgeAr: 'صورة متحركة GIF',
+    badgeEn: 'Animated GIF · 1:1',
+    badgeAr: 'GIF مربع · 1:1',
   };
 
   const galleryAssets: MediaAsset[] = [
@@ -63,49 +63,49 @@ export const MediaKitModal: React.FC<MediaKitModalProps> = ({ isOpen, onClose, l
       id: 'gameplay',
       titleEn: 'Board & Sentence Intersections',
       titleAr: 'لوحة اللعب وتقاطع الجمل',
-      descEn: 'Gridded board showing intersecting blue & walnut tiles with valid sentence highlights.',
-      descAr: 'لقطة تبرز لوحة اللعب وتقاطع الجمل الإنجليزية مع تمييز الجملة الصحيحة.',
+      descEn: '630×500 PNG board view showing intersecting blue & brown word tiles with valid sentence highlights.',
+      descAr: 'صورة PNG بمقاس 630×500 تبرز لوحة اللعب وتقاطع الجمل الإنجليزية مع تمييز الجملة الصحيحة.',
       previewSrc: gameplayImg,
-      downloadUrl: './media/fun-grammar-gameplay.jpg',
-      fileName: 'fun-grammar-gameplay.jpg',
-      badgeEn: 'JPG · 16:9',
-      badgeAr: 'صورة JPG · 16:9',
+      downloadUrl: './media/fun-grammar-gameplay.png',
+      fileName: 'fun-grammar-gameplay.png',
+      badgeEn: 'PNG · 630×500',
+      badgeAr: 'PNG · 630×500',
     },
     {
       id: 'rack',
       titleEn: '10-Word Rack & Tile Bank',
       titleAr: 'حامل الكلمات العشر والبطاقات',
-      descEn: 'Close-up of the white curved 10-word rack and colorful player tiles.',
-      descAr: 'لقطة مقربة لحامل الـ 10 كلمات والبطاقات الملونة للّاعبين.',
+      descEn: '630×500 PNG showcase of the white 10-word rack and bank word tiles.',
+      descAr: 'صورة PNG بمقاس 630×500 لحامل الـ 10 كلمات والبطاقات الكاملة للّاعبين.',
       previewSrc: rackImg,
-      downloadUrl: './media/fun-grammar-rack.jpg',
-      fileName: 'fun-grammar-rack.jpg',
-      badgeEn: 'JPG · 4:3',
-      badgeAr: 'صورة JPG · 4:3',
+      downloadUrl: './media/fun-grammar-rack.png',
+      fileName: 'fun-grammar-rack.png',
+      badgeEn: 'PNG · 630×500',
+      badgeAr: 'PNG · 630×500',
     },
     {
       id: 'scoring',
       titleEn: 'Scoring, Timer & Trophy',
       titleAr: 'احتساب النقاط والمؤقت والكأس',
-      descEn: 'Showcase artwork highlighting character-count scoring, 60s turn timer, and winner trophy.',
-      descAr: 'صورة توضح نظام النقاط بالحروف ومؤقت الدور وكأس الفائز.',
+      descEn: '630×500 PNG artwork highlighting character-count scoring, 60s turn timer, and rules.',
+      descAr: 'صورة PNG بمقاس 630×500 توضح نظام النقاط بالحروف ومؤقت الدور وقواعد الفوز.',
       previewSrc: scoringImg,
-      downloadUrl: './media/fun-grammar-scoring.jpg',
-      fileName: 'fun-grammar-scoring.jpg',
-      badgeEn: 'JPG · 4:3',
-      badgeAr: 'صورة JPG · 4:3',
+      downloadUrl: './media/fun-grammar-scoring.png',
+      fileName: 'fun-grammar-scoring.png',
+      badgeEn: 'PNG · 630×500',
+      badgeAr: 'PNG · 630×500',
     },
     {
       id: 'arena',
       titleEn: 'VS Computer & 2-Player Arena',
       titleAr: 'مباراة ضد الكمبيوتر أو لاعبين',
-      descEn: 'Strategic match setup showing Player 1 (Blue) competing against Computer / Player 2.',
-      descAr: 'مشهد لمباراة استراتيجية بين اللاعب الأول والكمبيوتر أو اللاعب الثاني.',
+      descEn: '630×500 PNG match setup showing Player 1 (Blue) competing against Computer / Player 2.',
+      descAr: 'صورة PNG بمقاس 630×500 لمباراة استراتيجية بين اللاعب الأول والكمبيوتر أو اللاعب الثاني.',
       previewSrc: arenaImg,
-      downloadUrl: './media/fun-grammar-arena.jpg',
-      fileName: 'fun-grammar-arena.jpg',
-      badgeEn: 'JPG · 16:9',
-      badgeAr: 'صورة JPG · 16:9',
+      downloadUrl: './media/fun-grammar-arena.png',
+      fileName: 'fun-grammar-arena.png',
+      badgeEn: 'PNG · 630×500',
+      badgeAr: 'PNG · 630×500',
     },
   ];
 
@@ -214,7 +214,7 @@ export const MediaKitModal: React.FC<MediaKitModalProps> = ({ isOpen, onClose, l
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             {/* Game Cover Card */}
             <div className="bg-slate-950/70 border border-amber-500/30 rounded-2xl overflow-hidden shadow-lg flex flex-col">
-              <div className="relative aspect-video bg-slate-900 overflow-hidden group">
+              <div className="relative aspect-[630/500] bg-slate-900 overflow-hidden group">
                 <img
                   src={coverAsset.previewSrc}
                   alt={isAr ? coverAsset.titleAr : coverAsset.titleEn}
@@ -249,7 +249,7 @@ export const MediaKitModal: React.FC<MediaKitModalProps> = ({ isOpen, onClose, l
                   ) : (
                     <>
                       <Download className="w-4 h-4" />
-                      <span>{isAr ? 'تنزيل غلاف اللعبة (JPG)' : 'Download Game Cover (JPG)'}</span>
+                      <span>{isAr ? 'تنزيل غلاف اللعبة (PNG)' : 'Download Game Cover (PNG)'}</span>
                     </>
                   )}
                 </a>
@@ -258,7 +258,7 @@ export const MediaKitModal: React.FC<MediaKitModalProps> = ({ isOpen, onClose, l
 
             {/* Animated GIF Card */}
             <div className="bg-slate-950/70 border border-cyan-500/30 rounded-2xl overflow-hidden shadow-lg flex flex-col">
-              <div className="relative aspect-video bg-slate-900 overflow-hidden group">
+              <div className="relative aspect-square bg-slate-900 overflow-hidden group">
                 <img
                   src={gifAsset.previewSrc}
                   alt={isAr ? gifAsset.titleAr : gifAsset.titleEn}
@@ -319,7 +319,7 @@ export const MediaKitModal: React.FC<MediaKitModalProps> = ({ isOpen, onClose, l
                   key={asset.id}
                   className="bg-slate-950/60 border border-slate-800 hover:border-slate-600 rounded-xl overflow-hidden flex flex-col transition-colors"
                 >
-                  <div className="relative aspect-video bg-slate-900 overflow-hidden group">
+                  <div className="relative aspect-[630/500] bg-slate-900 overflow-hidden group">
                     <img
                       src={asset.previewSrc}
                       alt={isAr ? asset.titleAr : asset.titleEn}
@@ -353,7 +353,7 @@ export const MediaKitModal: React.FC<MediaKitModalProps> = ({ isOpen, onClose, l
                       ) : (
                         <>
                           <Download className="w-3.5 h-3.5" />
-                          <span>{isAr ? 'تنزيل الصورة' : 'Download Image'}</span>
+                          <span>{isAr ? 'تنزيل الصورة (PNG)' : 'Download Image (PNG)'}</span>
                         </>
                       )}
                     </a>
