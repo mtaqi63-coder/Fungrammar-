@@ -34,13 +34,18 @@ export const RefereeModal: React.FC<RefereeModalProps> = ({
     setLoading(true);
 
     setTimeout(() => {
-      const rawWords = inputText.trim().split(/\s+/);
+      const rawWords = inputText
+        .trim()
+        .replace(/(\.{1,})/g, ' $1 ')
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
       const mockTiles = rawWords.map((w, i) => ({
         id: `m_${i}`,
         word: w,
         displayWord: w,
         category: 'noun' as const,
-        charCount: w === '.' ? 0 : w.replace(/[^a-zA-Z]/g, '').length,
+        charCount: /^\.+$/.test(w) ? 0 : w.replace(/[^a-zA-Z]/g, '').length,
       }));
       const val = validateFullSequence(mockTiles);
 

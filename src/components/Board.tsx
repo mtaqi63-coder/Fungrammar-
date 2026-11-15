@@ -158,28 +158,28 @@ export const Board: React.FC<BoardProps> = ({
   // Dynamic responsive sizing based on active width
   const cellSizeClass =
     visibleWidth <= 7
-      ? 'w-12 h-12 sm:w-14 sm:h-14'
+      ? 'w-10 h-10 sm:w-11 sm:h-11'
       : visibleWidth <= 12
-      ? 'w-10 h-10 sm:w-12 sm:h-12'
-      : visibleWidth <= 16
       ? 'w-9 h-9 sm:w-10 sm:h-10'
-      : 'w-8 h-8 sm:w-9 sm:h-9';
+      : visibleWidth <= 16
+      ? 'w-8 h-8 sm:w-9 sm:h-9'
+      : 'w-7 h-7 sm:w-8 sm:h-8';
 
   const colHeaderWidthClass =
     visibleWidth <= 7
-      ? 'w-12 sm:w-14'
+      ? 'w-10 sm:w-11'
       : visibleWidth <= 12
-      ? 'w-10 sm:w-12'
-      : visibleWidth <= 16
       ? 'w-9 sm:w-10'
-      : 'w-8 sm:w-9';
+      : visibleWidth <= 16
+      ? 'w-8 sm:w-9'
+      : 'w-7 sm:w-8';
 
   return (
     <div className="relative w-full flex flex-col items-center select-none">
       {/* Floating Interactive Alert Toast */}
       {boardAlert && (
         <div
-          className={`sticky top-2 z-40 mb-2 px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-2xl border-2 flex items-center gap-2.5 animate-in zoom-in-95 duration-150 max-w-xl text-center ${
+          className={`sticky top-1 z-40 mb-1 px-3 py-1.5 rounded-xl font-bold text-xs shadow-2xl border-2 flex items-center gap-2 animate-in zoom-in-95 duration-150 max-w-xl text-center ${
             boardAlert.type === 'warning'
               ? 'bg-rose-950/95 text-rose-100 border-rose-500 shadow-rose-950/50 ring-2 ring-rose-500/30'
               : 'bg-amber-500 text-slate-950 border-amber-300'
@@ -195,17 +195,17 @@ export const Board: React.FC<BoardProps> = ({
       )}
 
       {/* Main Board Container */}
-      <div className="w-full overflow-auto max-h-[64vh] flex justify-center p-2 rounded-2xl bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border border-slate-800 shadow-2xl">
+      <div className="w-full overflow-auto max-h-[44vh] sm:max-h-[50vh] flex justify-center p-1 sm:p-1.5 rounded-xl bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border border-slate-800 shadow-2xl">
         <div
           style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}
-          className="transition-transform duration-150 inline-block p-3 rounded-xl bg-slate-900/90 border border-slate-800/80 shadow-inner"
+          className="transition-transform duration-150 inline-block p-1.5 sm:p-2 rounded-lg bg-slate-900/90 border border-slate-800/80 shadow-inner"
         >
           {/* Top Column Coordinate Headers */}
-          <div className="flex mb-1 ml-6">
+          <div className="flex mb-0.5 ml-5">
             {visibleColLabels.map((col) => (
               <div
                 key={col}
-                className={`${colHeaderWidthClass} text-center text-[10px] font-mono text-slate-500 font-semibold`}
+                className={`${colHeaderWidthClass} text-center text-[9px] font-mono text-slate-500 font-semibold`}
               >
                 {col}
               </div>
@@ -220,12 +220,12 @@ export const Board: React.FC<BoardProps> = ({
             return (
               <div key={r} className="flex items-center">
                 {/* Row Coordinate Header */}
-                <div className="w-6 text-right pr-1.5 text-[10px] font-mono text-slate-500 font-semibold">
+                <div className="w-5 text-right pr-1 text-[9px] font-mono text-slate-500 font-semibold">
                   {r + 1}
                 </div>
 
                 {/* Row Cells */}
-                <div className="flex gap-[3px] mb-[3px]">
+                <div className="flex gap-[2px] mb-[2px]">
                   {visibleRowCells.map((cell, cOffset) => {
                     const c = activeBounds.minCol + cOffset;
                     const tile = getTileAt(r, c);

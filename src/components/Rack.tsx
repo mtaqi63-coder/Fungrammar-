@@ -69,9 +69,9 @@ export const Rack: React.FC<RackProps> = ({
   };
 
   return (
-    <div className="w-full max-w-4xl flex flex-col items-center gap-2 select-none">
+    <div className="w-full max-w-4xl flex flex-col items-center gap-1 select-none">
       {/* Scroll Guidance Helper Banner & Step 1 Hint */}
-      <div className="w-full flex items-center justify-between px-2 text-[11px] text-slate-400">
+      <div className="w-full flex items-center justify-between px-1.5 text-[10px] sm:text-[11px] text-slate-400">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="font-semibold text-slate-300">
             {isAr ? 'حامل كلماتك (10 كلمات):' : 'Your 10-Word Rack:'}
@@ -94,7 +94,17 @@ export const Rack: React.FC<RackProps> = ({
               )}
             </div>
           )}
-          {!isDealing && !selectedTile && !hasTempTiles && !disabled && (
+          {!isDealing && isExchangeMode && !disabled && (
+            <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-200 border border-rose-500/50 font-semibold text-[10px] flex items-center gap-1">
+              <span>⇄</span>
+              <span>
+                {isAr
+                  ? 'وضع التبديل: اختر الكلمات ثم اضغط تبديل (سيمر دورك)'
+                  : 'Exchange Mode: Pick tiles, then hit Exchange (turn passes)'}
+              </span>
+            </span>
+          )}
+          {!isDealing && !isExchangeMode && !selectedTile && !hasTempTiles && !disabled && (
             <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold text-[10px] animate-pulse flex items-center gap-1">
               <span>👆</span>
               <span>{isAr ? 'الخطوة 1: اضغط على كلمة لاختيارها' : 'Step 1: Hit a tile here to pick it'}</span>
@@ -105,8 +115,8 @@ export const Rack: React.FC<RackProps> = ({
               <span>✓</span>
               <span>
                 {isAr
-                  ? `تم اختيار "${selectedTile.word}" ➔ اضغط على اللوحة`
-                  : `Picked "${selectedTile.word}" ➔ Hit board location`}
+                  ? `تم اختيار "${selectedTile.customName || selectedTile.displayWord}" ➔ اضغط على اللوحة`
+                  : `Picked "${selectedTile.customName || selectedTile.displayWord}" ➔ Hit board location`}
               </span>
             </span>
           )}
@@ -117,21 +127,21 @@ export const Rack: React.FC<RackProps> = ({
       </div>
 
       {/* Main Rack Box with Integrated Left/Right Scroll Arrows */}
-      <div className="relative w-full flex items-center gap-1.5">
+      <div className="relative w-full flex items-center gap-1">
         {/* Left Scroll Arrow */}
         <button
           type="button"
           onClick={handleScrollLeft}
           title={isAr ? 'تمرير لليسار' : 'Scroll Left'}
-          className="shrink-0 w-8 h-12 sm:w-9 sm:h-14 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-md flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          className="shrink-0 w-7 h-11 sm:w-8 sm:h-12 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-md flex items-center justify-center transition-all hover:scale-105 active:scale-95"
         >
-          <ChevronLeft className="w-5 h-5 text-blue-400" />
+          <ChevronLeft className="w-4 h-4 text-blue-400" />
         </button>
 
         {/* Scrollable Tile Track (modeled after the white plastic rack strip) */}
         <div
           ref={setTrackRef}
-          className={`flex-1 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 border-2 rounded-xl p-2 sm:p-2.5 shadow-xl flex items-center justify-start sm:justify-center gap-2 overflow-x-auto scroll-smooth min-h-[64px] transition-colors ${
+          className={`flex-1 bg-gradient-to-r from-slate-200 via-slate-100 to-slate-200 border-2 rounded-xl p-1.5 sm:p-2 shadow-xl flex items-center justify-start sm:justify-center gap-1.5 overflow-x-auto scroll-smooth min-h-[54px] transition-colors ${
             isDealing ? 'border-cyan-400 ring-2 ring-cyan-400/40' : 'border-slate-300'
           }`}
         >
@@ -154,13 +164,13 @@ export const Rack: React.FC<RackProps> = ({
                     onSelectTile(tile);
                   }
                 }}
-                className={`relative flex-shrink-0 w-13 h-13 sm:w-14 sm:h-14 rounded-lg flex flex-col items-center justify-center p-1 cursor-pointer transition-all duration-300 ${
+                className={`relative flex-shrink-0 w-12 h-12 sm:w-13 sm:h-13 rounded-lg flex flex-col items-center justify-center p-1 cursor-pointer transition-all duration-300 ${
                   isMarkedExchange
                     ? 'bg-rose-600 border-2 border-rose-300 text-white transform scale-95 shadow-inner'
                     : isSelected
-                    ? 'bg-blue-600 border-2 border-amber-300 text-white transform -translate-y-2 shadow-2xl ring-4 ring-amber-400/50'
+                    ? 'bg-blue-600 border-2 border-amber-300 text-white transform -translate-y-1.5 shadow-2xl ring-4 ring-amber-400/50'
                     : isJustArrived
-                    ? 'bg-blue-600 border-2 border-cyan-300 text-white scale-110 -translate-y-1 shadow-xl ring-4 ring-cyan-400/60'
+                    ? 'bg-blue-600 border-2 border-cyan-300 text-white scale-105 -translate-y-1 shadow-xl ring-4 ring-cyan-400/60'
                     : 'bg-blue-700 hover:bg-blue-600 border border-blue-500 text-white shadow-md hover:-translate-y-0.5'
                 } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
@@ -225,9 +235,9 @@ export const Rack: React.FC<RackProps> = ({
           type="button"
           onClick={handleScrollRight}
           title={isAr ? 'تمرير لليمين' : 'Scroll Right'}
-          className="shrink-0 w-8 h-12 sm:w-9 sm:h-14 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-md flex items-center justify-center transition-all hover:scale-105 active:scale-95"
+          className="shrink-0 w-7 h-11 sm:w-8 sm:h-12 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 shadow-md flex items-center justify-center transition-all hover:scale-105 active:scale-95"
         >
-          <ChevronRight className="w-5 h-5 text-blue-400" />
+          <ChevronRight className="w-4 h-4 text-blue-400" />
         </button>
       </div>
     </div>

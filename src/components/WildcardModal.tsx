@@ -18,11 +18,18 @@ export const WildcardModal: React.FC<WildcardModalProps> = ({
   onConfirmName,
   language,
 }) => {
+  const [nameInput, setNameInput] = useState(tile?.customName || '');
+
+  React.useEffect(() => {
+    if (isOpen && tile) {
+      setNameInput(tile.customName || '');
+    }
+  }, [isOpen, tile]);
+
   if (!isOpen || !tile) return null;
   const isAr = language === 'ar';
 
   const len = tile.wildcardLen || 4;
-  const [nameInput, setNameInput] = useState(tile.customName || '');
   const suggestions = WILDCARD_SUGGESTIONS[len] || [];
 
   const isValidLength = nameInput.trim().length === len;
@@ -75,6 +82,12 @@ export const WildcardModal: React.FC<WildcardModalProps> = ({
                 maxLength={len}
                 value={nameInput}
                 onChange={(e) => setNameInput(e.target.value.replace(/[^a-zA-Z]/g, ''))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && isValidLength) {
+                    e.preventDefault();
+                    handleSave();
+                  }
+                }}
                 placeholder={`e.g. ${suggestions[0] || 'Name'}`}
                 className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-sm font-semibold text-white focus:outline-none focus:border-blue-500 uppercase tracking-wider"
               />

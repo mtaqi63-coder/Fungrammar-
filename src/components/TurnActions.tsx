@@ -23,6 +23,7 @@ interface TurnActionsProps {
   onStartExchangeMode?: () => void;
   onCancelExchangeMode?: () => void;
   rackEmpty?: boolean;
+  bankEmpty?: boolean;
 }
 
 export const TurnActions: React.FC<TurnActionsProps> = ({
@@ -40,16 +41,17 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
   onStartExchangeMode,
   onCancelExchangeMode,
   rackEmpty = false,
+  bankEmpty = false,
 }) => {
   const isAr = language === 'ar';
   const isValidToPlay = hasTempTiles && !!validation?.isValid;
 
   return (
-    <div className="w-full max-w-4xl flex flex-col items-center gap-2 select-none">
+    <div className="w-full max-w-4xl flex flex-col items-center gap-1 select-none">
       {/* Live Move Preview & Grammar Validation Status */}
       {hasTempTiles && validation && (
         <div
-          className={`w-full px-3 py-2 rounded-lg border text-xs flex items-center justify-between gap-3 transition-all ${
+          className={`w-full px-2.5 py-1.5 rounded-lg border text-xs flex items-center justify-between gap-2 transition-all ${
             validation.isValid
               ? 'bg-emerald-950/60 border-emerald-500 text-emerald-200'
               : 'bg-rose-950/60 border-rose-500 text-rose-200'
@@ -78,7 +80,7 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
           </div>
 
           {validation.isValid && (
-            <div className="flex items-center gap-1.5 shrink-0 bg-emerald-900/60 px-2.5 py-1 rounded-md border border-emerald-400/40">
+            <div className="flex items-center gap-1.5 shrink-0 bg-emerald-900/60 px-2 py-0.5 rounded-md border border-emerald-400/40">
               <span className="text-white font-mono font-bold text-sm tabular-nums">+{validation.score}</span>
               <span className="text-[10px] text-emerald-200 uppercase font-semibold">
                 {isAr ? 'حرف/نقطة' : 'Pts'}
@@ -94,7 +96,7 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {turnTimeLeft !== undefined && !disabled ? (
             <div
-              className={`flex items-center gap-1 px-2.5 sm:px-3 py-2 rounded-xl border text-xs font-mono font-bold transition-all shadow-sm shrink-0 ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl border text-xs font-mono font-bold transition-all shadow-sm shrink-0 ${
                 turnTimeLeft <= 10
                   ? 'bg-rose-950/80 text-rose-300 border-rose-500/70 animate-pulse ring-1 ring-rose-500/50'
                   : turnTimeLeft <= 20
@@ -140,20 +142,24 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
                       onStartExchangeMode();
                     }
                   }}
-                  disabled={disabled || rackEmpty}
+                  disabled={disabled || rackEmpty || bankEmpty}
                   className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold transition-all shadow-sm shrink-0 disabled:opacity-50 ${
                     selectedTile
                       ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white ring-2 ring-amber-400/80 shadow-md shadow-amber-500/30 scale-105 active:scale-95 animate-pulse font-bold cursor-pointer'
                       : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
                   }`}
                   title={
-                    selectedTile
+                    bankEmpty
                       ? isAr
-                        ? `تبديل "${selectedTile.word}" بكلمة جديدة من البنك`
-                        : `Exchange "${selectedTile.word}" with a new tile from bank`
+                        ? 'بنك الكلمات فارغ'
+                        : 'Word bank is empty'
+                      : selectedTile
+                      ? isAr
+                        ? `تبديل "${selectedTile.word}" بكلمة جديدة من البنك ويمر الدور`
+                        : `Exchange "${selectedTile.word}" with bank and pass turn (Rule 6)`
                       : isAr
-                      ? 'تبديل كلمات من البنك (قاعدة 6)'
-                      : 'Exchange tiles with bank (Rule 6)'
+                      ? 'تبديل كلمات من البنك ويمر الدور (قاعدة 6)'
+                      : 'Exchange tiles with bank and pass turn (Rule 6)'
                   }
                 >
                   <ArrowRightLeft className={`w-3.5 h-3.5 ${selectedTile ? 'text-white' : 'text-rose-400'}`} />
@@ -173,9 +179,10 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
                     {selectedForExchange.length} {isAr ? 'محددة' : 'selected'}
                   </span>
                   <button
-                    onClick={onConfirmExchange}
-                    disabled={selectedForExchange.length === 0}
+                    onClick={() => onConfirmExchange()}
+                    disabled={disabled || selectedForExchange.length === 0 || bankEmpty}
                     className="flex items-center gap-1 px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold text-xs transition-all shadow-md ring-2 ring-amber-400/70 disabled:opacity-50"
+                    title={isAr ? 'تأكيد التبديل وتمرير الدور (قاعدة 6)' : 'Confirm exchange and pass turn (Rule 6)'}
                   >
                     <ArrowRightLeft className="w-3.5 h-3.5 text-white" />
                     <span>
@@ -191,7 +198,8 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
                   {onCancelExchangeMode && (
                     <button
                       onClick={onCancelExchangeMode}
-                      className="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs"
+                      disabled={disabled}
+                      className="px-2 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs disabled:opacity-50"
                     >
                       {isAr ? 'إلغاء' : 'Cancel'}
                     </button>

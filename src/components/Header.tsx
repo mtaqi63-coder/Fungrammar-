@@ -39,24 +39,24 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="w-full bg-slate-900 border-b border-slate-800 text-slate-100 select-none">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-5 py-1.5 flex items-center justify-between gap-2 sm:gap-4">
         {/* Brand Zone */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center shadow-md border border-blue-400/30">
-            <span className="font-extrabold text-white text-base tracking-tighter">FG</span>
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-md border border-blue-400/30">
+            <span className="font-extrabold text-white text-sm sm:text-base tracking-tighter">FG</span>
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold tracking-tight text-white whitespace-nowrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-base sm:text-lg font-bold tracking-tight text-white whitespace-nowrap leading-tight">
                 Fun Grammar
               </span>
               {isAr && (
-                <span className="text-sm font-semibold text-blue-400 font-['Cairo'] whitespace-nowrap">
+                <span className="text-xs sm:text-sm font-semibold text-blue-400 font-['Cairo'] whitespace-nowrap leading-tight">
                   القواعد المرحة
                 </span>
               )}
             </div>
-            <span className="text-[11px] text-slate-400 hidden sm:inline whitespace-nowrap">
+            <span className="text-[10px] text-slate-400 hidden sm:inline whitespace-nowrap leading-tight">
               By Dr. Mohammed Taqi Alkhonaizi · Bahrain © 2005
             </span>
           </div>
@@ -181,33 +181,33 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Mobile Submenu Bar */}
-      <div className="lg:hidden flex items-center justify-around border-t border-slate-800/80 px-2 py-1.5 text-[11px] text-slate-300 bg-slate-900/90 overflow-x-auto gap-1">
-        <button onClick={onOpenDemo} className="flex items-center gap-1 text-blue-300 hover:text-white py-1 px-1.5 font-semibold shrink-0">
-          <Play className="w-3.5 h-3.5 fill-current" />
+      <div className="lg:hidden flex items-center justify-around border-t border-slate-800/80 px-1.5 py-0.5 text-[10px] text-slate-300 bg-slate-900/90 overflow-x-auto gap-1">
+        <button onClick={onOpenDemo} className="flex items-center gap-1 text-blue-300 hover:text-white py-0.5 px-1 font-semibold shrink-0">
+          <Play className="w-3 h-3 fill-current" />
           <span>{isAr ? 'عرض' : 'Demo'}</span>
         </button>
-        <button onClick={onOpenRules} className="flex items-center gap-1 hover:text-white py-1 px-1.5 shrink-0">
-          <BookOpen className="w-3.5 h-3.5 text-blue-400" />
+        <button onClick={onOpenRules} className="flex items-center gap-1 hover:text-white py-0.5 px-1 shrink-0">
+          <BookOpen className="w-3 h-3 text-blue-400" />
           <span>{isAr ? 'القواعد' : 'Rules'}</span>
         </button>
-        <button onClick={onOpenStory} className="flex items-center gap-1 text-rose-300 hover:text-white py-1 px-1.5 font-semibold shrink-0">
-          <ScrollText className="w-3.5 h-3.5 text-rose-400" />
+        <button onClick={onOpenStory} className="flex items-center gap-1 text-rose-300 hover:text-white py-0.5 px-1 font-semibold shrink-0">
+          <ScrollText className="w-3 h-3 text-rose-400" />
           <span>{isAr ? 'القصة' : 'Story'}</span>
         </button>
-        <button onClick={onOpenMediaKit} className="flex items-center gap-1 text-amber-300 hover:text-white py-1 px-1.5 font-semibold shrink-0">
-          <ImageIcon className="w-3.5 h-3.5 text-amber-400" />
+        <button onClick={onOpenMediaKit} className="flex items-center gap-1 text-amber-300 hover:text-white py-0.5 px-1 font-semibold shrink-0">
+          <ImageIcon className="w-3 h-3 text-amber-400" />
           <span>{isAr ? 'الغلاف وGIF' : 'Cover/GIF'}</span>
         </button>
-        <button onClick={onOpenManualPdf} className="flex items-center gap-1 text-indigo-300 hover:text-white py-1 px-1.5 font-semibold shrink-0">
-          <FileText className="w-3.5 h-3.5 text-indigo-400" />
+        <button onClick={onOpenManualPdf} className="flex items-center gap-1 text-indigo-300 hover:text-white py-0.5 px-1 font-semibold shrink-0">
+          <FileText className="w-3 h-3 text-indigo-400" />
           <span>{isAr ? 'PDF' : 'PDF'}</span>
         </button>
-        <button onClick={onOpenSampleBoard} className="flex items-center gap-1 hover:text-white py-1 px-1.5 shrink-0">
-          <LayoutGrid className="w-3.5 h-3.5 text-emerald-400" />
+        <button onClick={onOpenSampleBoard} className="flex items-center gap-1 hover:text-white py-0.5 px-1 shrink-0">
+          <LayoutGrid className="w-3 h-3 text-emerald-400" />
           <span>{isAr ? 'لوحة 2005' : '2005 Board'}</span>
         </button>
-        <button onClick={onOpenReferee} className="flex items-center gap-1 hover:text-white py-1 px-1.5 shrink-0">
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+        <button onClick={onOpenReferee} className="flex items-center gap-1 hover:text-white py-0.5 px-1 shrink-0">
+          <Sparkles className="w-3 h-3 text-amber-400" />
           <span>{isAr ? 'الحكم' : 'Referee'}</span>
         </button>
       </div>

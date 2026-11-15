@@ -72,6 +72,7 @@ export default function App() {
   const [turnTimeLeft, setTurnTimeLeft] = useState(60);
   const [timeAlert, setTimeAlert] = useState<string | null>(null);
   const [exchangeAlert, setExchangeAlert] = useState<string | null>(null);
+  const exchangeAlertTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTimingOutRef = useRef(false);
 
   // Board
@@ -274,6 +275,11 @@ export default function App() {
       setLastTurnSentence(null);
       setTurnTimeLeft(60);
       setTimeAlert(null);
+      if (exchangeAlertTimerRef.current) {
+        clearTimeout(exchangeAlertTimerRef.current);
+        exchangeAlertTimerRef.current = null;
+      }
+      setExchangeAlert(null);
 
       if (animateDeal) {
         sound.playShuffle();
@@ -414,9 +420,20 @@ export default function App() {
     );
   };
 
-  // Rule 6: Exchange selected tiles with bank
+  // Rule 6: Exchange selected tiles with bank and pass turn
   const handleConfirmExchange = (targetTile?: TileData) => {
-    if (!activePlayer || bank.length === 0) return;
+    if (!activePlayer || activePlayer.isAi || isAiThinking || isGameOver || bank.length === 0) return;
+
+    // Guard against React SyntheticEvent being accidentally passed via onClick={handleConfirmExchange}
+    const validTargetTile =
+      targetTile &&
+      typeof targetTile === 'object' &&
+      'id' in targetTile &&
+      'word' in targetTile &&
+      typeof targetTile.id === 'string' &&
+      typeof targetTile.word === 'string'
+        ? targetTile
+        : undefined;
 
     // Safety: recall any placed temp tiles on the board first
     let currentRack = [...activePlayer.rack];
@@ -429,12 +446,12 @@ export default function App() {
     }
 
     // Determine tiles to exchange:
-    // 1. Explicit targetTile passed
+    // 1. Explicit validTargetTile passed
     // 2. Or selectedRackTile
     // 3. Or selectedForExchange
     let tilesToExchange: TileData[] = [];
-    if (targetTile) {
-      const found = currentRack.find((t) => t.id === targetTile.id);
+    if (validTargetTile) {
+      const found = currentRack.find((t) => t.id === validTargetTile.id);
       if (found) tilesToExchange = [found];
     } else if (selectedRackTile) {
       const found = currentRack.find((t) => t.id === selectedRackTile.id);
@@ -444,6 +461,7 @@ export default function App() {
     }
 
     if (tilesToExchange.length === 0) {
+      setSelectedRackTile(null);
       setIsExchangeMode(true);
       return;
     }
@@ -472,20 +490,29 @@ export default function App() {
 
     const oldWords = returnedTiles.map((t) => t.word).join(', ');
     const newWords = drawnTiles.map((t) => t.word).join(', ');
+    const nextPlayer = players.length > 1 ? players[(activePlayerIndex + 1) % players.length] : null;
 
     setSelectedRackTile(null);
     setIsExchangeMode(false);
     setSelectedForExchange([]);
     setConsecutivePasses(0);
 
-    // Show brief banner alert
+    // Show brief banner alert confirming exchange + turn pass (Rule 6)
+    if (exchangeAlertTimerRef.current) {
+      clearTimeout(exchangeAlertTimerRef.current);
+    }
     setExchangeAlert(
-      language === 'ar'
+      nextPlayer
+        ? language === 'ar'
+          ? `✓ قام ${activePlayer.nameAr} بتبديل "${oldWords}" وسحب "${newWords}" — تم تمرير الدور إلى ${nextPlayer.nameAr}! (${newBank.length} كلمة بالبنك)`
+          : `✓ ${activePlayer.name} exchanged "${oldWords}" for "${newWords}" — turn passed to ${nextPlayer.name}! (${newBank.length} tiles in bank)`
+        : language === 'ar'
         ? `✓ تم تبديل "${oldWords}" وسحب "${newWords}" من البنك (${newBank.length} كلمة متبقية بالبنك)`
         : `✓ Exchanged "${oldWords}" for "${newWords}" from the bank! (${newBank.length} tiles in bank)`
     );
-    setTimeout(() => {
+    exchangeAlertTimerRef.current = setTimeout(() => {
       setExchangeAlert(null);
+      exchangeAlertTimerRef.current = null;
     }, 4500);
 
     // Rule 6: Turn is bypassed to next player
@@ -499,6 +526,14 @@ export default function App() {
         ...p,
         rack: p.rack.map((t) => (t.id === tileId ? { ...t, customName, displayWord: customName } : t)),
       }))
+    );
+    setSelectedRackTile((prev) =>
+      prev && prev.id === tileId ? { ...prev, customName, displayWord: customName } : prev
+    );
+    setTempPlacements((prev) =>
+      prev.map((p) =>
+        p.tile.id === tileId ? { ...p, tile: { ...p.tile, customName, displayWord: customName } } : p
+      )
     );
   };
 
@@ -945,19 +980,19 @@ export default function App() {
       )}
 
       {/* Main Game Arena */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-2 sm:p-4 flex flex-col items-center gap-2.5">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-1.5 py-1 sm:px-3 sm:py-1.5 flex flex-col items-center gap-1 sm:gap-1.5">
         {/* Time Limit Alert Banner */}
         {timeAlert && (
-          <div className="w-full max-w-xl px-4 py-2.5 rounded-xl bg-amber-500/20 border border-amber-500/50 text-amber-200 text-xs font-semibold flex items-center justify-center gap-2 shadow-lg animate-bounce">
-            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+          <div className="w-full max-w-xl px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/50 text-amber-200 text-xs font-semibold flex items-center justify-center gap-2 shadow-lg animate-bounce">
+            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
             <span>{timeAlert}</span>
           </div>
         )}
 
         {/* Exchange Alert Banner */}
         {exchangeAlert && (
-          <div className="w-full max-w-xl px-4 py-2.5 rounded-xl bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 text-xs font-semibold flex items-center justify-center gap-2 shadow-lg animate-pulse">
-            <ArrowRightLeft className="w-4 h-4 text-emerald-400 shrink-0" />
+          <div className="w-full max-w-xl px-3 py-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 text-xs font-semibold flex items-center justify-center gap-2 shadow-lg animate-pulse">
+            <ArrowRightLeft className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span>{exchangeAlert}</span>
           </div>
         )}
@@ -1045,12 +1080,16 @@ export default function App() {
           isExchangeMode={isExchangeMode}
           selectedForExchange={selectedForExchange}
           onConfirmExchange={handleConfirmExchange}
-          onStartExchangeMode={() => setIsExchangeMode(true)}
+          onStartExchangeMode={() => {
+            setSelectedRackTile(null);
+            setIsExchangeMode(true);
+          }}
           onCancelExchangeMode={() => {
             setIsExchangeMode(false);
             setSelectedForExchange([]);
           }}
           rackEmpty={!activePlayer || activePlayer.rack.length === 0}
+          bankEmpty={bank.length === 0}
         />
 
         {/* Played Sentences & Grammar Rules Log (Both Players) */}
