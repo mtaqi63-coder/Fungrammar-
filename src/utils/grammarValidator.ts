@@ -238,15 +238,16 @@ export function parseNounPhrase(
   if (w1 === 'he' || w1 === 'she' || w1 === 'it') return { valid: true, length: 1, number: 'singular' };
   if (w1 === 'we' || w1 === 'they') return { valid: true, length: 1, number: 'plural' };
 
-  // 2. Indefinite pronouns: "some body", "some thing" (+ optional postpositive adjective: "some thing big", "some body good")
+  // 2. Indefinite pronouns: "some body", "some thing" (+ optional postpositive adjective ONLY on "some thing": "some thing big")
+  // Note: "some body" / "somebody" + postpositive adjective (e.g. "somebody young") is disallowed.
   if (w1 === 'some body' || w1 === 'somebody' || w1 === 'some thing' || w1 === 'something') {
-    if (allowPostpositiveAdj && remaining.length >= 2 && ADJECTIVES.has(remaining[1])) {
+    if (allowPostpositiveAdj && (w1 === 'some thing' || w1 === 'something') && remaining.length >= 2 && ADJECTIVES.has(remaining[1])) {
       return { valid: true, length: 2, number: 'singular' };
     }
     return { valid: true, length: 1, number: 'singular' };
   }
   if (w1 === 'some' && remaining.length >= 2 && (remaining[1] === 'body' || remaining[1] === 'thing')) {
-    if (allowPostpositiveAdj && remaining.length >= 3 && ADJECTIVES.has(remaining[2])) {
+    if (allowPostpositiveAdj && remaining[1] === 'thing' && remaining.length >= 3 && ADJECTIVES.has(remaining[2])) {
       return { valid: true, length: 3, number: 'singular' };
     }
     return { valid: true, length: 2, number: 'singular' };
@@ -408,7 +409,7 @@ export function isHumanEntity(tokens: string[]): boolean {
     return false;
   }
 
-  // Multi-token phrase: handle indefinite pronoun + postpositive adjective (e.g. "some body good")
+  // Multi-token phrase: indefinite pronoun phrase check
   if (tokens[0] === 'some body' || tokens[0] === 'somebody' || (tokens[0] === 'some' && tokens[1] === 'body')) {
     return true;
   }
@@ -1304,9 +1305,20 @@ function validateDeclarativeSentence(words: string[]): {
     return { isValid: false, reason: 'Incomplete statement: Missing subject before verb' };
   }
 
-  // Parse and validate subject NP
-  const subjectNp = parseNounPhrase(subjectTokens, 0);
+  // Parse and validate subject NP (disallow postpositive adjectives in subject position)
+  const subjectNp = parseNounPhrase(subjectTokens, 0, false);
   if (!subjectNp.valid || subjectNp.length !== subjectTokens.length) {
+    if (
+      subjectNp.valid &&
+      subjectNp.length < subjectTokens.length &&
+      getIndefiniteBase(subjectTokens) &&
+      ADJECTIVES.has(subjectTokens[subjectNp.length])
+    ) {
+      return {
+        isValid: false,
+        reason: `Indefinite pronoun "${subjectTokens.slice(0, subjectNp.length).join(' ')}" cannot be modified by "${subjectTokens.slice(subjectNp.length).join(' ')}"`,
+      };
+    }
     return {
       isValid: false,
       reason: subjectNp.reason || `Invalid subject phrase "${subjectTokens.join(' ')}"`,
@@ -1343,7 +1355,7 @@ function validateInvertedQuestion(words: string[]): {
 
   // 0. Am: expects "I" + Copula Complement (e.g. "Am I good?", "Am I here?")
   if (first === 'am') {
-    const subjectNp = parseNounPhrase(rest, 0, true);
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid || subjectNp.number !== 'i') {
       return { isValid: false, reason: subjectNp.reason || '"Am" requires subject "I"' };
     }
@@ -1377,14 +1389,7 @@ function validateInvertedQuestion(words: string[]): {
       return { isValid: false, reason: exNp.reason || `Invalid existential question "${words.join(' ')}"` };
     }
 
-    let subjectNp = parseNounPhrase(rest, 0, true);
-    if (subjectNp.valid && subjectNp.length === rest.length) {
-      // Avoid swallowing a postpositive adjective that is actually the sentence complement (e.g. "Is some thing big")
-      const fallbackNp = parseNounPhrase(rest, 0, false);
-      if (fallbackNp.valid && fallbackNp.length < rest.length) {
-        subjectNp = fallbackNp;
-      }
-    }
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid) {
       return { isValid: false, reason: subjectNp.reason || `Invalid subject after "${first}"` };
     }
@@ -1404,7 +1409,7 @@ function validateInvertedQuestion(words: string[]): {
 
   // 2. Are / Were: expects Plural Subject (or "you") + Copula Complement
   if (first === 'are' || first === 'were') {
-    const subjectNp = parseNounPhrase(rest, 0);
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid) {
       return { isValid: false, reason: subjectNp.reason || `Invalid subject after "${first}"` };
     }
@@ -1424,7 +1429,7 @@ function validateInvertedQuestion(words: string[]): {
 
   // 3. Does: expects Singular Subject + [not] + Base Verb (have, do, name) + Complement
   if (first === 'does') {
-    const subjectNp = parseNounPhrase(rest, 0);
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid || subjectNp.number !== 'singular') {
       return { isValid: false, reason: subjectNp.reason || '"Does" requires a singular subject' };
     }
@@ -1469,7 +1474,7 @@ function validateInvertedQuestion(words: string[]): {
 
   // 4. Do: expects Plural Subject / You / I + [not] + Base Verb + Complement
   if (first === 'do') {
-    const subjectNp = parseNounPhrase(rest, 0);
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid || (subjectNp.number !== 'plural' && subjectNp.number !== 'you' && subjectNp.number !== 'i')) {
       return { isValid: false, reason: subjectNp.reason || '"Do" requires a plural subject or "you"' };
     }
@@ -1514,7 +1519,7 @@ function validateInvertedQuestion(words: string[]): {
 
   // 5. Did: expects Subject + [not] + Base Verb + Complement
   if (first === 'did') {
-    const subjectNp = parseNounPhrase(rest, 0);
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid) {
       return { isValid: false, reason: subjectNp.reason || 'Invalid subject after "did"' };
     }
@@ -1576,7 +1581,7 @@ function validateInvertedQuestion(words: string[]): {
       }
     }
 
-    const subjectNp = parseNounPhrase(rest, 0);
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid) {
       return { isValid: false, reason: subjectNp.reason || `Invalid subject after "${first}"` };
     }
@@ -1631,7 +1636,7 @@ function validateInvertedQuestion(words: string[]): {
 
   // 7. Has / Have: expects Subject + Object NP
   if (first === 'has') {
-    const subjectNp = parseNounPhrase(rest, 0);
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid || subjectNp.number !== 'singular') {
       return { isValid: false, reason: subjectNp.reason || '"Has" requires a singular subject' };
     }
@@ -1647,7 +1652,7 @@ function validateInvertedQuestion(words: string[]): {
   }
 
   if (first === 'have') {
-    const subjectNp = parseNounPhrase(rest, 0);
+    const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid || (subjectNp.number !== 'plural' && subjectNp.number !== 'you')) {
       return { isValid: false, reason: subjectNp.reason || '"Have" requires a plural subject or "you"' };
     }
@@ -1685,7 +1690,7 @@ function validateWhQuestion(words: string[]): {
   if (wh === 'how' && ADJECTIVES.has(rest[0]) && rest.length >= 3 && ['is', 'am', 'are', 'was', 'were'].includes(rest[1])) {
     const copula = rest[1];
     const afterCop = rest.slice(2);
-    const subjectNp = parseNounPhrase(afterCop, 0, true);
+    const subjectNp = parseNounPhrase(afterCop, 0, false);
     if (!subjectNp.valid) {
       return { isValid: false, reason: subjectNp.reason || `Invalid subject after "how ${rest[0]} ${copula}"` };
     }
@@ -1710,7 +1715,7 @@ function validateWhQuestion(words: string[]): {
   // 1. Adverbial WH-questions: where, when, why, how + auxiliary + subject + ...
   if (wh === 'where' || wh === 'when' || wh === 'why' || wh === 'how') {
     if (['is', 'am', 'are', 'was', 'were'].includes(aux)) {
-      const subjectNp = parseNounPhrase(afterAux, 0, true);
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
       if (!subjectNp.valid) {
         return { isValid: false, reason: subjectNp.reason || `Invalid subject after "${wh} ${aux}"` };
       }
@@ -1737,7 +1742,7 @@ function validateWhQuestion(words: string[]): {
     }
 
     if (aux === 'can' || aux === 'will') {
-      const subjectNp = parseNounPhrase(afterAux, 0, true);
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
       if (!subjectNp.valid) {
         return { isValid: false, reason: subjectNp.reason || `Invalid subject after "${wh} ${aux}"` };
       }
@@ -1793,7 +1798,7 @@ function validateWhQuestion(words: string[]): {
     }
 
     if (aux === 'do' || aux === 'does' || aux === 'did') {
-      const subjectNp = parseNounPhrase(afterAux, 0, true);
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
       if (!subjectNp.valid) {
         return { isValid: false, reason: subjectNp.reason || `Invalid subject after "${wh} ${aux}"` };
       }
@@ -1857,7 +1862,7 @@ function validateWhQuestion(words: string[]): {
           };
         }
       }
-      const subjectNp = parseNounPhrase(afterAux, 0, true);
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
       if (subjectNp.valid && subjectNp.length === afterAux.length && checkSubjectVerbAgreement(subjectNp.number, aux).isValid) {
         return {
           isValid: true,
@@ -1880,7 +1885,7 @@ function validateWhQuestion(words: string[]): {
 
     // Object WH-question with do/does/did/can/will: "What does he have", "What did you do", "Who will you name", "What did you name it"
     if (['do', 'does', 'did', 'can', 'will'].includes(aux)) {
-      const subjectNp = parseNounPhrase(afterAux, 0, true);
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
       if (subjectNp.valid && checkSubjectVerbAgreement(subjectNp.number, aux).isValid) {
         let afterSubj = afterAux.slice(subjectNp.length);
         if (afterSubj[0] === 'not') afterSubj = afterSubj.slice(1);
@@ -2038,7 +2043,7 @@ function validateLocativeFronting(words: string[]): {
   const lastToken = words[words.length - 1];
   if (copulas.includes(lastToken)) {
     const subjTokens = words.slice(1, words.length - 1);
-    const subjNp = parseNounPhrase(subjTokens, 0);
+    const subjNp = parseNounPhrase(subjTokens, 0, false);
     if (subjNp.valid && subjNp.length === subjTokens.length) {
       const agreement = checkSubjectVerbAgreement(subjNp.number, lastToken);
       if (!agreement.isValid) {
@@ -2151,8 +2156,8 @@ export function validateSentenceClause(tokens: string[]): {
       if (verbAfterIdx > i + 1) {
         const leftNpTokens = words.slice(0, i);
         const rightNpTokens = words.slice(i + 1, verbAfterIdx);
-        const leftNp = parseNounPhrase(leftNpTokens, 0);
-        const rightNp = parseNounPhrase(rightNpTokens, 0);
+        const leftNp = parseNounPhrase(leftNpTokens, 0, false);
+        const rightNp = parseNounPhrase(rightNpTokens, 0, false);
         if (
           leftNp.valid &&
           leftNp.length === leftNpTokens.length &&
@@ -2189,7 +2194,7 @@ export function validateSentenceClause(tokens: string[]): {
   }
   if (firstVerbIdx > 0) {
     const subjTokens = words.slice(0, firstVerbIdx);
-    const subjNp = parseNounPhrase(subjTokens, 0);
+    const subjNp = parseNounPhrase(subjTokens, 0, false);
     if (subjNp.valid && subjNp.length === subjTokens.length) {
       for (let i = firstVerbIdx + 1; i < words.length - 1; i++) {
         if ((words[i] === 'and' || words[i] === 'but') && ALL_VERBS.has(words[i + 1])) {
