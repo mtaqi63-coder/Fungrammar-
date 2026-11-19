@@ -1,6 +1,7 @@
 import React from 'react';
 import { Player } from '../types/game';
-import { User, Bot, Layers, CheckCircle2, Maximize2, Minimize2 } from 'lucide-react';
+import { TOTAL_BANK_TILES } from '../data/tiles';
+import { User, Bot, Layers, CheckCircle2, Maximize2, Minimize2, Copy, Check } from 'lucide-react';
 
 interface ScoreBoardProps {
   players: Player[];
@@ -10,6 +11,8 @@ interface ScoreBoardProps {
   language: 'en' | 'ar';
   isAutoExpandMode?: boolean;
   onToggleExpand?: () => void;
+  onCopyBoard?: () => void;
+  boardCopied?: boolean;
   turnTimeLeft?: number;
   bankRef?: React.RefObject<HTMLDivElement | null>;
   isDealing?: boolean;
@@ -23,6 +26,8 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
   language,
   isAutoExpandMode = true,
   onToggleExpand,
+  onCopyBoard,
+  boardCopied = false,
   turnTimeLeft,
   bankRef,
   isDealing = false,
@@ -112,7 +117,7 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
             <Layers className={`w-3.5 h-3.5 text-cyan-400 ${isDealing ? 'animate-pulse' : ''}`} />
             <span className="font-medium">{isAr ? 'بنك الكلمات:' : 'Word Bank:'}</span>
             <span className="font-mono font-bold text-cyan-300 tabular-nums">{bankCount}</span>
-            <span className="text-[10px] text-slate-400">/ 100</span>
+            <span className="text-[10px] text-slate-400">/ {TOTAL_BANK_TILES}</span>
           </div>
 
           {/* Expand / Shrink Grid Toggle: Placed directly after bank counter window */}
@@ -127,11 +132,11 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
               title={
                 isAutoExpandMode
                   ? isAr
-                    ? 'توسيع اللوحة (عرض 20×20 كامل)'
-                    : 'Expand to Full 20x20 View'
+                    ? 'عرض اللوحة الكاملة'
+                    : 'Expand to Full Grid View'
                   : isAr
-                  ? 'تصغير اللوحة'
-                  : 'Shrink to Compact View'
+                  ? 'تصغير اللوحة (مع هامش 3 مربعات)'
+                  : 'Compact Auto-Fit View (3-Tile Margin)'
               }
             >
               {isAutoExpandMode ? (
@@ -147,6 +152,38 @@ export const ScoreBoard: React.FC<ScoreBoardProps> = ({
                   : isAr
                   ? 'تصغير'
                   : 'Shrink'}
+              </span>
+            </button>
+          )}
+
+          {/* Copy Board Snapshot Button: Placed directly beside the Expand button */}
+          {onCopyBoard && (
+            <button
+              onClick={onCopyBoard}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] sm:text-xs font-semibold transition-all cursor-pointer ${
+                boardCopied
+                  ? 'bg-emerald-900/70 border-emerald-500/70 text-emerald-200 shadow-sm'
+                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:text-white hover:border-cyan-500/60'
+              }`}
+              title={
+                isAr
+                  ? 'حفظ ملف PDF يحتوي على صورة اللوحة وسجل تطابق الجمل والقواعد النحوية'
+                  : 'Save PDF containing the board picture & sentence-grammar rules history'
+              }
+            >
+              {boardCopied ? (
+                <Check className="w-3 h-3 text-emerald-400" />
+              ) : (
+                <Copy className="w-3 h-3 text-cyan-400" />
+              )}
+              <span>
+                {boardCopied
+                  ? isAr
+                    ? 'تم حفظ PDF!'
+                    : 'Saved PDF!'
+                  : isAr
+                  ? 'نسخ اللوحة'
+                  : 'Copy Board'}
               </span>
             </button>
           )}

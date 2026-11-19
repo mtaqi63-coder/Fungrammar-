@@ -5,6 +5,52 @@ export interface GrammarResult {
   score: number;
   reason?: string;
   breakdown?: string;
+  formattedText?: string;
+  ruleName?: string;
+  ruleExplanation?: string;
+}
+
+export function isQuestionRuleName(ruleName?: string): boolean {
+  return Boolean(ruleName && (ruleName.includes('Question') || ruleName.includes('Interrogative')));
+}
+
+function buildTrailingClauseTag(trailingTokens?: string[]): { ruleSuffix: string; descPart: string } {
+  if (!trailingTokens || trailingTokens.length === 0) {
+    return { ruleSuffix: '', descPart: '' };
+  }
+  const text = trailingTokens.join(' ');
+  if (trailingTokens[0] === 'to') {
+    return {
+      ruleSuffix: ' + Prepositional Indirect Object',
+      descPart: ` + prepositional indirect object "${text}"`,
+    };
+  }
+  if (trailingTokens[0] === 'for') {
+    return {
+      ruleSuffix: ' + Prepositional Complement',
+      descPart: ` + prepositional complement "${text}"`,
+    };
+  }
+  return {
+    ruleSuffix: ' + Adverbial Modifier',
+    descPart: ` + adverbial modifier "${text}"`,
+  };
+}
+
+function collectUniqueRuleTags(...names: Array<string | undefined>): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const name of names) {
+    if (!name) continue;
+    for (const part of name.split(/\s*[;|]\s*/)) {
+      const trimmed = part.trim();
+      if (trimmed && !seen.has(trimmed)) {
+        seen.add(trimmed);
+        out.push(trimmed);
+      }
+    }
+  }
+  return out;
 }
 
 // Grammatical token categories
@@ -93,6 +139,15 @@ export const ALL_STANDARD_GAME_WORDS = new Set([
   'the',
   'and',
   'but',
+  'where',
+  'when',
+  'who',
+  'whom',
+  'whose',
+  'which',
+  'what',
+  'why',
+  'how',
 ]);
 
 const HUMAN_NOUNS = new Set([
@@ -149,6 +204,15 @@ const DEMONSTRATIVES_SINGULAR = new Set(['this', 'that']);
 const DEMONSTRATIVES_PLURAL = new Set(['these', 'those']);
 
 const ADJECTIVES = new Set(['good', 'bad', 'small', 'young', 'old', 'big']);
+// British Council LearnEnglish adjective order: opinion (1) -> size (2) -> age (3)
+const ADJECTIVE_ORDER_RANK: Record<string, number> = {
+  good: 1,
+  bad: 1,
+  big: 2,
+  small: 2,
+  young: 3,
+  old: 3,
+};
 // Only evaluative adjectives in Fun Grammar can take a prepositional phrase ("good/bad to him", "good/bad for you")
 const EVALUATIVE_ADJECTIVES = new Set(['good', 'bad']);
 
@@ -176,7 +240,7 @@ const ALL_VERBS = new Set([
   'will',
 ]);
 
-const WH_QUESTION_WORDS = new Set(['where', 'when', 'who', 'what', 'why', 'how']);
+const WH_QUESTION_WORDS = new Set(['where', 'when', 'who', 'whom', 'whose', 'which', 'what', 'why', 'how']);
 
 /**
  * Normalizes a word token
@@ -253,8 +317,10 @@ export function parseNounPhrase(
     return { valid: true, length: 2, number: 'singular' };
   }
 
-  // 3. Proper nouns & wildcards (N3-N6, custom names) or standalone family nouns used as kinship titles (Father, Mother, Brother, Sister)
-  if (['n3', 'n4', 'n5', 'n6', 'father', 'mother', 'brother', 'sister'].includes(w1)) {
+  // 3. Proper nouns & wildcards (N3-N6, custom names).
+  // ALL common singular countable nouns (including "father", "mother", "brother", "sister", "friend", etc.)
+  // require a determiner ("my father", "your father", "the mother", "a friend").
+  if (['n3', 'n4', 'n5', 'n6'].includes(w1)) {
     return { valid: true, length: 1, number: 'singular' };
   }
   // Any custom wildcard name of 3-6 letters (must NOT be a standard game word or WH-question word!)
@@ -296,13 +362,29 @@ export function parseNounPhrase(
 
       // [Det] + [Noun] e.g. "a friend", "the sister", "my mother", "his name", "that brother", "this thing", "that night"
       if (COMMON_SINGULAR_NOUNS.has(w2)) {
+        if (POSSESSIVES.has(w1) && TIME_NOUNS.has(w2)) {
+          return {
+            valid: false,
+            length: 2,
+            number: 'singular',
+            reason: `Grammar error: Possessive "${w1}" cannot modify time noun "${w2}" (use "the ${w2}", "that ${w2}", or "a good ${w2}")`,
+          };
+        }
         return { valid: true, length: 2, number: 'singular' };
       }
 
-      // [Det] + [Adj] + [Noun] e.g. "a good night", "the young sister", "my old friend", "that young brother"
+      // [Det] + [Adj] + [Noun] or [Det] + [Adj1] + [Adj2] + [Noun] (British Council adjective order: opinion -> size -> age)
       if (remaining.length >= 3) {
         const w3 = remaining[2];
         if (ADJECTIVES.has(w2) && COMMON_SINGULAR_NOUNS.has(w3)) {
+          if (POSSESSIVES.has(w1) && TIME_NOUNS.has(w3)) {
+            return {
+              valid: false,
+              length: 3,
+              number: 'singular',
+              reason: `Grammar error: Possessive "${w1}" cannot modify time noun "${w3}" (use "the", "a", or "that")`,
+            };
+          }
           // English article agreement: "a" cannot precede vowel-initial words such as "old"
           if (w1 === 'a' && /^[aeiou]/.test(w2)) {
             return {
@@ -313,6 +395,41 @@ export function parseNounPhrase(
             };
           }
           return { valid: true, length: 3, number: 'singular' };
+        }
+
+        if (
+          remaining.length >= 4 &&
+          ADJECTIVES.has(w2) &&
+          ADJECTIVES.has(w3) &&
+          COMMON_SINGULAR_NOUNS.has(remaining[3])
+        ) {
+          if (POSSESSIVES.has(w1) && TIME_NOUNS.has(remaining[3])) {
+            return {
+              valid: false,
+              length: 4,
+              number: 'singular',
+              reason: `Grammar error: Possessive "${w1}" cannot modify time noun "${remaining[3]}" (use "the", "a", or "that")`,
+            };
+          }
+          if (w1 === 'a' && /^[aeiou]/.test(w2)) {
+            return {
+              valid: false,
+              length: 4,
+              number: 'singular',
+              reason: `Grammar error: Article "a" cannot precede vowel-initial adjective "${w2}" (use "the", "my", or another determiner)`,
+            };
+          }
+          const rank1 = ADJECTIVE_ORDER_RANK[w2] ?? 99;
+          const rank2 = ADJECTIVE_ORDER_RANK[w3] ?? 99;
+          if (rank1 >= rank2) {
+            return {
+              valid: false,
+              length: 4,
+              number: 'singular',
+              reason: `Adjective order error: "${w2} ${w3}" violates English adjective order (opinion -> size -> age)`,
+            };
+          }
+          return { valid: true, length: 4, number: 'singular' };
         }
       }
     }
@@ -334,6 +451,15 @@ export function parseNounPhrase(
       };
     }
     return { valid: true, length: 1, number: 'plural' };
+  }
+
+  if (COMMON_SINGULAR_NOUNS.has(w1)) {
+    return {
+      valid: false,
+      length: 0,
+      number: 'singular',
+      reason: `Singular countable noun "${w1}" requires a determiner (e.g. "my ${w1}", "the ${w1}", "a ${w1}")`,
+    };
   }
 
   return { valid: false, length: 0, number: 'singular', reason: `"${w1}" is not a valid noun phrase` };
@@ -512,7 +638,7 @@ export function parsePrepositionalPhrase(tokens: string[]): {
       }
     }
 
-    const objRes = parseObjectPhrase(objectTokens);
+    const objRes = parseObjectPhrase(objectTokens, true);
     if (objRes.valid) {
       if (getSemanticCategory(objectTokens) === 'name') {
         return {
@@ -536,7 +662,10 @@ export function parsePrepositionalPhrase(tokens: string[]): {
  * and coordinated object phrases ("you and me", "a brother and a sister"),
  * while strictly rejecting subject-only pronouns (I, he, she, we, they).
  */
-export function parseObjectPhrase(tokens: string[]): { valid: boolean; reason?: string } {
+export function parseObjectPhrase(
+  tokens: string[],
+  allowBareParent: boolean = false
+): { valid: boolean; reason?: string } {
   if (tokens.length === 0) {
     return { valid: false, reason: 'Missing object noun phrase' };
   }
@@ -556,6 +685,12 @@ export function parseObjectPhrase(tokens: string[]): { valid: boolean; reason?: 
         reason: `"${w}" is a subject pronoun and cannot be used as an object (use "${suggestionMap[w]}")`,
       };
     }
+    if (w === 'brother' || w === 'sister' || (!allowBareParent && (w === 'father' || w === 'mother'))) {
+      return {
+        valid: false,
+        reason: `Singular countable noun "${w}" requires a determiner (e.g. "a ${w}", "my ${w}")`,
+      };
+    }
     if (OBJECT_PRONOUNS.has(w)) {
       return { valid: true };
     }
@@ -563,8 +698,8 @@ export function parseObjectPhrase(tokens: string[]): { valid: boolean; reason?: 
 
   for (let i = 1; i < tokens.length - 1; i++) {
     if (tokens[i] === 'and') {
-      const leftRes = parseObjectPhrase(tokens.slice(0, i));
-      const rightRes = parseObjectPhrase(tokens.slice(i + 1));
+      const leftRes = parseObjectPhrase(tokens.slice(0, i), allowBareParent);
+      const rightRes = parseObjectPhrase(tokens.slice(i + 1), allowBareParent);
       if (leftRes.valid && rightRes.valid) {
         return { valid: true };
       }
@@ -580,14 +715,18 @@ export function parseObjectPhrase(tokens: string[]): { valid: boolean; reason?: 
 }
 
 /**
- * Parses optional trailing adverbial modifiers at the end of a clause:
+ * Parses optional trailing adverbial modifiers at the end of a clause following British Council place-before-time order:
  * - Deictic location adverbs: "here", "there"
+ * - Compound directional/location adverbs: "up here", "up there", "down here", "down there", "out here", "out there"
  * - Prepositional phrases: "in the morning", "for you", "to me"
- * - Location adverb + "in" + time PP: "here in the morning", "out in the night"
- * - Combinations like "here for you"
+ * - Location + time/beneficiary PP: "here in the morning", "out in the night", "out there in the night", "here for you in the morning"
  */
-function parseTrailingAdverbials(tokens: string[]): { valid: boolean; reason?: string } {
+function parseTrailingAdverbials(
+  tokens: string[],
+  options: { allowTo?: boolean } = {}
+): { valid: boolean; reason?: string } {
   if (tokens.length === 0) return { valid: true };
+  const allowTo = Boolean(options.allowTo);
 
   if (tokens.length === 1) {
     if (tokens[0] === 'here' || tokens[0] === 'there') {
@@ -597,14 +736,46 @@ function parseTrailingAdverbials(tokens: string[]): { valid: boolean; reason?: s
   }
 
   if (tokens[0] === 'here' || tokens[0] === 'there') {
-    const restCheck = parseTrailingAdverbials(tokens.slice(1));
-    if (restCheck.valid) return { valid: true };
+    const afterLoc = tokens.slice(1);
+    if ((afterLoc[0] === 'in' || afterLoc[0] === 'for') && parseTrailingAdverbials(afterLoc, options).valid) {
+      return { valid: true };
+    }
   }
 
-  if ((tokens[0] === 'up' || tokens[0] === 'down' || tokens[0] === 'out') && tokens[1] === 'in') {
-    const prepCheck = parsePrepositionalPhrase(tokens.slice(1));
-    if (prepCheck.valid && prepCheck.length === tokens.length - 1) {
-      return { valid: true };
+  if (tokens[0] === 'up' || tokens[0] === 'down' || tokens[0] === 'out') {
+    if (tokens[1] === 'here' || tokens[1] === 'there') {
+      const afterLoc = tokens.slice(2);
+      if (afterLoc.length === 0) return { valid: true };
+      if ((afterLoc[0] === 'in' || afterLoc[0] === 'for') && parseTrailingAdverbials(afterLoc, options).valid) {
+        return { valid: true };
+      }
+    }
+    if (tokens[1] === 'in') {
+      const prepCheck = parsePrepositionalPhrase(tokens.slice(1));
+      if (prepCheck.valid && prepCheck.length === tokens.length - 1) {
+        return { valid: true };
+      }
+    }
+  }
+
+  if (tokens[0] === 'to' && !allowTo) {
+    return { valid: false, reason: `Prepositional phrase "${tokens.join(' ')}" cannot follow this verb or noun phrase` };
+  }
+
+  // Allow beneficiary/recipient PP followed by time PP (e.g. "for you in the morning")
+  for (let split = 2; split <= tokens.length - 2; split++) {
+    if (tokens[split] === 'in') {
+      const leftPrep = parsePrepositionalPhrase(tokens.slice(0, split));
+      const rightPrep = parsePrepositionalPhrase(tokens.slice(split));
+      if (
+        leftPrep.valid &&
+        leftPrep.length === split &&
+        (tokens[0] === 'for' || (allowTo && tokens[0] === 'to')) &&
+        rightPrep.valid &&
+        rightPrep.length === tokens.length - split
+      ) {
+        return { valid: true };
+      }
     }
   }
 
@@ -641,18 +812,69 @@ function parseObjectWithTrailing(
   return { valid: false, objTokens: tokens, trailingTokens: [], reason: direct.reason };
 }
 
-function validateDoObjectWithTrailing(tokens: string[]): { isValid: boolean; reason?: string } {
+function parseNameObjectWithTrailing(tokens: string[]): {
+  valid: boolean;
+  objTokens?: string[];
+  nameTokens?: string[];
+  trailingTokens?: string[];
+  reason?: string;
+} {
+  const direct = parseObjectWithTrailing(tokens);
+  if (direct.valid) {
+    if (direct.objTokens.length === 1 && isProperNameToken(direct.objTokens[0])) {
+      return {
+        valid: false,
+        reason: `Verb "name" cannot take bare proper name "${direct.objTokens[0]}" alone (use e.g. "name him ${direct.objTokens[0]}" or "name a friend")`,
+      };
+    }
+    return direct;
+  }
+
+  // Ditransitive / object-complement naming: "Name [object] [ProperName] [trailing adverbial]"
+  for (let nameIdx = 1; nameIdx < tokens.length; nameIdx++) {
+    const candidateName = tokens[nameIdx];
+    if (!isProperNameToken(candidateName)) continue;
+    const objPart = tokens.slice(0, nameIdx);
+    if (objPart.length === 1 && isProperNameToken(objPart[0])) continue;
+    if (isBareIndefinitePronounPhrase(objPart)) continue;
+    const trailPart = tokens.slice(nameIdx + 1);
+    const objCheck = parseObjectPhrase(objPart);
+    if (objCheck.valid && parseTrailingAdverbials(trailPart).valid) {
+      return {
+        valid: true,
+        objTokens: objPart,
+        nameTokens: [candidateName],
+        trailingTokens: trailPart,
+      };
+    }
+  }
+
+  return direct;
+}
+
+function isPersonalPronounToken(w: string): boolean {
+  return ['i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them'].includes(w);
+}
+
+function validateDoObjectWithTrailing(tokens: string[]): {
+  isValid: boolean;
+  objTokens?: string[];
+  trailingTokens?: string[];
+  reason?: string;
+} {
   const direct = validateDoObject(tokens);
-  if (direct.isValid) return direct;
+  if (direct.isValid) {
+    return { isValid: true, objTokens: tokens, trailingTokens: [] };
+  }
 
   for (let split = tokens.length - 1; split >= 1; split--) {
     const objPart = tokens.slice(0, split);
     const trailPart = tokens.slice(split);
     const objCheck = validateDoObject(objPart);
     if (objCheck.isValid) {
-      const trailCheck = parseTrailingAdverbials(trailPart);
+      const trailCheck = parseTrailingAdverbials(trailPart, { allowTo: true });
       if (trailCheck.valid) {
-        return { isValid: true };
+        return { isValid: true, objTokens: objPart, trailingTokens: trailPart };
       }
     }
   }
@@ -690,7 +912,7 @@ function getSemanticCategory(tokens: string[]): 'human' | 'time' | 'name' | 'obj
 
   const last = tokens[tokens.length - 1];
   if (tokens.length === 1) {
-    if (['i', 'you', 'he', 'she', 'we', 'they', 'me', 'him', 'us', 'them'].includes(last)) {
+    if (['i', 'you', 'he', 'she', 'we', 'they', 'me', 'him', 'her', 'us', 'them'].includes(last)) {
       return 'human';
     }
     if (['it', 'this', 'that', 'these', 'those'].includes(last)) {
@@ -704,15 +926,14 @@ function getSemanticCategory(tokens: string[]): 'human' | 'time' | 'name' | 'obj
 }
 
 function canSubjectPerformDo(subjectTokens: string[]): boolean {
-  const subjCat = getSemanticCategory(subjectTokens);
-  return subjCat !== 'time' && subjCat !== 'name' && subjCat !== 'object';
+  return getSemanticCategory(subjectTokens) === 'human';
 }
 
 function validateDoObject(objTokens: string[]): { isValid: boolean; reason?: string } {
   if (objTokens.length === 0) {
     return {
       isValid: false,
-      reason: 'Verb "do" requires a thing or activity as object (e.g. "a thing", "some thing", "good")',
+      reason: 'Verb "do" requires a thing or activity as object (e.g. "a thing", "something", "good")',
     };
   }
   if (objTokens.length === 1 && ['good', 'it', 'this', 'that'].includes(objTokens[0])) {
@@ -726,10 +947,100 @@ function validateDoObject(objTokens: string[]): { isValid: boolean; reason?: str
   if (objCat !== 'object') {
     return {
       isValid: false,
-      reason: `Verb "do" takes a thing or activity as object (e.g. "a thing", "some thing"), not "${objTokens.join(' ')}"`,
+      reason: `Verb "do" takes a thing or activity as object (e.g. "a thing", "something"), not "${objTokens.join(' ')}"`,
     };
   }
   return { isValid: true };
+}
+
+function hasReflexivePersonConflict(subjectTokens: string[], objTokens: string[]): string | null {
+  if (objTokens.length !== 1) return null;
+  const objWord = objTokens[0];
+  const subjHasFirstPerson = subjectTokens.some((t) => t === 'i' || t === 'we');
+  const subjHasSecondPerson = subjectTokens.some((t) => t === 'you');
+  if (subjHasFirstPerson && (objWord === 'me' || objWord === 'us')) {
+    return `Reflexive pronoun error: Subject "${subjectTokens.join(' ')}" cannot take same-person pronoun "${objWord}" as object`;
+  }
+  if (subjHasSecondPerson && objWord === 'you') {
+    return `Reflexive pronoun error: Subject "${subjectTokens.join(' ')}" cannot take same-person pronoun "${objWord}" as object`;
+  }
+  return null;
+}
+
+function validateHaveObjectWithTrailing(
+  subjectTokens: string[],
+  tokens: string[]
+): { valid: boolean; objTokens: string[]; trailingTokens: string[]; reason?: string } {
+  const objRes = parseObjectWithTrailing(tokens);
+  if (!objRes.valid) return objRes;
+
+  const obj = objRes.objTokens;
+
+  const reflexiveError = hasReflexivePersonConflict(subjectTokens, obj);
+  if (reflexiveError) {
+    return {
+      valid: false,
+      objTokens: obj,
+      trailingTokens: objRes.trailingTokens,
+      reason: reflexiveError,
+    };
+  }
+
+  // Lexical "have" does not take a bare proper name as direct object (*He has George)
+  if (obj.length === 1 && isProperNameToken(obj[0])) {
+    return {
+      valid: false,
+      objTokens: obj,
+      trailingTokens: objRes.trailingTokens,
+      reason: `Semantic mismatch: Verb "have" cannot take proper name "${obj[0]}" as object`,
+    };
+  }
+
+  // Time nouns ("night", "morning") with "have" require an adjective (e.g. "have a good night", not *Bob had a morning)
+  if (getSemanticCategory(obj) === 'time' && !obj.some((t) => ADJECTIVES.has(t))) {
+    return {
+      valid: false,
+      objTokens: obj,
+      trailingTokens: objRes.trailingTokens,
+      reason: `Semantic mismatch: Verb "have" with time noun "${obj[obj.length - 1]}" requires a descriptive adjective (e.g. "a good ${obj[obj.length - 1]}")`,
+    };
+  }
+
+  // Prevent tautological indefinite repetition (*Something has something)
+  const subjIndef = getIndefiniteBase(subjectTokens);
+  const objIndef = getIndefiniteBase(obj);
+  if (subjIndef && objIndef && subjIndef === objIndef) {
+    return {
+      valid: false,
+      objTokens: obj,
+      trailingTokens: objRes.trailingTokens,
+      reason: `Redundant object: "${subjectTokens.join(' ')}" cannot have "${obj.join(' ')}"`,
+    };
+  }
+
+  // Non-human subjects (something, a thing, the morning, it, this) cannot have
+  // bare demonstrative pronoun objects (*Something had these) or human objects (*Something has a sister)
+  const subjCat = getSemanticCategory(subjectTokens);
+  if (subjCat !== 'human') {
+    if (obj.length === 1 && (DEMONSTRATIVES_SINGULAR.has(obj[0]) || DEMONSTRATIVES_PLURAL.has(obj[0]))) {
+      return {
+        valid: false,
+        objTokens: obj,
+        trailingTokens: objRes.trailingTokens,
+        reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot have bare demonstrative "${obj[0]}" as object`,
+      };
+    }
+    if (getSemanticCategory(obj) === 'human') {
+      return {
+        valid: false,
+        objTokens: obj,
+        trailingTokens: objRes.trailingTokens,
+        reason: `Semantic mismatch: Non-human subject "${subjectTokens.join(' ')}" cannot have person "${obj.join(' ')}"`,
+      };
+    }
+  }
+
+  return objRes;
 }
 
 /**
@@ -791,30 +1102,29 @@ export function validateCopulaComplement(
   // 0b. Present continuous / progressive: "[be] + doing + [thing / something / it / this / that / good]"
   // e.g. "That brother is doing a thing", "She is doing some thing good", "Is he doing it?"
   if (rest[0] === 'doing') {
-    if (subjectTokens && subjectTokens.length > 0) {
-      const subjCat = getSemanticCategory(subjectTokens);
-      if (subjCat === 'time' || subjCat === 'name') {
-        return {
-          isValid: false,
-          reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot perform progressive action "doing"`,
-        };
-      }
+    if (subjectTokens && subjectTokens.length > 0 && !canSubjectPerformDo(subjectTokens)) {
+      return {
+        isValid: false,
+        reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot perform progressive action "doing"`,
+      };
     }
 
     const objTokens = rest.slice(1);
     if (objTokens.length === 0) {
       return {
         isValid: false,
-        reason: 'Incomplete progressive verb: "doing" requires an object (e.g. "doing a thing", "doing some thing", "doing good")',
+        reason: 'Incomplete progressive verb: "doing" requires an object (e.g. "doing a thing", "doing something", "doing good")',
       };
     }
 
     const progressiveCheck = validateDoObjectWithTrailing(objTokens);
     if (progressiveCheck.isValid) {
+      const directObj = progressiveCheck.objTokens ?? objTokens;
+      const trailTag = buildTrailingClauseTag(progressiveCheck.trailingTokens);
       return {
         isValid: true,
-        ruleName: 'Present/Past Progressive ("Be + Doing + Object")',
-        ruleExplanation: `Rule 4: Progressive verb construction "${tokens.join(' ')}".`,
+        ruleName: `Present/Past Progressive ("Be + Doing + Object")${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Progressive verb construction "${tokens[0]}" + direct object "${directObj.join(' ')}"${trailTag.descPart}.`,
       };
     }
 
@@ -836,18 +1146,42 @@ export function validateCopulaComplement(
         };
       }
       const leftRes = validateCopulaComplement(leftComp, subjectTokens, subjectNumber, isNegated);
-      const rightRes = validateCopulaComplement(rightComp, subjectTokens, subjectNumber, isNegated);
+      const rightNegated = rest[i] === 'and' ? isNegated : false;
+      const rightRes = validateCopulaComplement(rightComp, subjectTokens, subjectNumber, rightNegated);
       if (leftRes.isValid && rightRes.isValid) {
-        return {
-          isValid: true,
-          ruleName: 'Compound Copula Complement',
-          ruleExplanation: `Rule 4: Coordinated complements joined by "${rest[i]}" ("${tokens.join(' ')}").`,
+        const getCompKind = (toks: string[]): 'adj' | 'loc' | 'prep' | 'np' | 'other' => {
+          const core = toks[0] === 'not' ? toks.slice(1) : toks;
+          if (core.length === 0) return 'other';
+          if (ADJECTIVES.has(core[0])) return 'adj';
+          if (LOCATION_ADVERBS.has(core[0])) return 'loc';
+          if (TRUE_PREPOSITIONS.has(core[0])) return 'prep';
+          return 'np';
         };
+        const leftKind = getCompKind(leftComp);
+        const rightKind = getCompKind(rightComp);
+        const hasContrastNegation = isNegated || hasNotToken || rightComp[0] === 'not';
+        // "but" between two location adverbs or two noun phrases requires contrast negation (e.g. "my brother but not my friend", NOT "*my morning but your friend")
+        if (leftKind === rightKind && !(rest[i] === 'but' && (leftKind === 'loc' || leftKind === 'np') && !hasContrastNegation)) {
+          if (leftKind === 'np' && rightKind === 'np') {
+            const leftCore = leftComp[0] === 'not' ? leftComp.slice(1) : leftComp;
+            const rightCore = rightComp[0] === 'not' ? rightComp.slice(1) : rightComp;
+            const leftCat = getSemanticCategory(leftCore);
+            const rightCat = getSemanticCategory(rightCore);
+            if (leftCat !== rightCat && leftCat !== 'neutral_pronoun' && rightCat !== 'neutral_pronoun') {
+              continue;
+            }
+          }
+          return {
+            isValid: true,
+            ruleName: 'Compound Copula Complement',
+            ruleExplanation: `Rule 4: Coordinated complements joined by "${rest[i]}" ("${tokens.join(' ')}").`,
+          };
+        }
       }
     }
   }
 
-  // 1. Single adjective: "good", "bad", "young", "old", "big", "small" (+ optional time/location modifier, e.g. "good in the morning")
+  // 1. Single adjective: "good", "bad", "young", "old", "big", "small" (+ optional time/location/prepositional modifier)
   if (ADJECTIVES.has(rest[0])) {
     if (rest.length === 1) {
       return {
@@ -864,15 +1198,23 @@ export function validateCopulaComplement(
           reason: `Adjective "${adj}" cannot take a prepositional phrase (cannot say "${rest.join(' ')}")`,
         };
       }
-      const prepParse = parsePrepositionalPhrase(rest.slice(1));
-      if (prepParse.valid && prepParse.length === rest.length - 1) {
-        return {
-          isValid: true,
-          ruleName: 'Evaluative Adjective + Prepositional Complement',
-          ruleExplanation: `Rule 4 & 11: Evaluative adjective "${adj}" with prepositional complement "${rest.slice(1).join(' ')}".`,
-        };
+      let lastPrepError: string | undefined;
+      for (let split = rest.length; split >= 3; split--) {
+        const prepParse = parsePrepositionalPhrase(rest.slice(1, split));
+        if (prepParse.valid && prepParse.length === split - 1) {
+          const afterPrep = rest.slice(split);
+          if (afterPrep.length === 0 || parseTrailingAdverbials(afterPrep).valid) {
+            return {
+              isValid: true,
+              ruleName: 'Evaluative Adjective + Prepositional Complement',
+              ruleExplanation: `Rule 4 & 11: Evaluative adjective "${adj}" with prepositional complement "${rest.slice(1).join(' ')}".`,
+            };
+          }
+        } else if (!lastPrepError && prepParse.reason) {
+          lastPrepError = prepParse.reason;
+        }
       }
-      return { isValid: false, reason: prepParse.reason || `Invalid complement after "${adj}"` };
+      return { isValid: false, reason: lastPrepError || `Invalid complement after "${adj}"` };
     }
     if (rest[1] === 'in' || rest[1] === 'here' || rest[1] === 'there') {
       const trail = parseTrailingAdverbials(rest.slice(1));
@@ -893,6 +1235,15 @@ export function validateCopulaComplement(
 
   // 2. Single location adverb: "here", "there", "down", "up", "out"
   if (rest.length === 1 && LOCATION_ADVERBS.has(rest[0])) {
+    if (subjectTokens && subjectTokens.length > 0) {
+      const subjCat = getSemanticCategory(subjectTokens);
+      if (subjCat === 'name' || (subjCat === 'time' && (rest[0] === 'up' || rest[0] === 'down' || rest[0] === 'out'))) {
+        return {
+          isValid: false,
+          reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot take location/direction adverb "${rest[0]}"`,
+        };
+      }
+    }
     return {
       isValid: true,
       ruleName: 'Subject + Copula Verb + Location Adverb',
@@ -900,18 +1251,37 @@ export function validateCopulaComplement(
     };
   }
 
-  // 3. Location adverb + adverbial modifier (e.g. "there in the morning", "here for you", "out in the night")
+  // 3. Location adverb + modifier (e.g. "there in the morning", "here for you", "out there", "up here in the morning")
   if (LOCATION_ADVERBS.has(rest[0]) && rest.length > 1) {
+    if (subjectTokens && subjectTokens.length > 0) {
+      const subjCat = getSemanticCategory(subjectTokens);
+      if (subjCat === 'name' || (subjCat === 'time' && (rest[0] === 'up' || rest[0] === 'down' || rest[0] === 'out'))) {
+        return {
+          isValid: false,
+          reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot take location modifier "${rest.join(' ')}"`,
+        };
+      }
+    }
     if (
-      rest[1] === 'in' ||
-      ((rest[0] === 'here' || rest[0] === 'there') && (rest[1] === 'for' || rest[1] === 'to'))
+      (rest[0] === 'up' || rest[0] === 'down' || rest[0] === 'out') &&
+      (rest[1] === 'here' || rest[1] === 'there')
     ) {
-      const timePrep = parsePrepositionalPhrase(rest.slice(1));
-      if (timePrep.valid && timePrep.length === rest.length - 1) {
+      const afterCompound = rest.slice(2);
+      if (afterCompound.length === 0 || parseTrailingAdverbials(afterCompound).valid) {
+        return {
+          isValid: true,
+          ruleName: 'Subject + Copula Verb + Compound Location Adverb',
+          ruleExplanation: `Rule 4 & 11: Compound location adverb "${rest.join(' ')}".`,
+        };
+      }
+    }
+    if (rest[1] === 'in' || ((rest[0] === 'here' || rest[0] === 'there') && rest[1] === 'for')) {
+      const trail = parseTrailingAdverbials(rest.slice(1));
+      if (trail.valid) {
         return {
           isValid: true,
           ruleName: 'Subject + Copula Verb + Location & Time/Beneficiary Phrase',
-          ruleExplanation: `Rule 4 & 11: Location adverb "${rest[0]}" paired with prepositional phrase "${rest.slice(1).join(' ')}".`,
+          ruleExplanation: `Rule 4 & 11: Location adverb "${rest[0]}" paired with modifier "${rest.slice(1).join(' ')}".`,
         };
       }
     }
@@ -922,10 +1292,30 @@ export function validateCopulaComplement(
   }
 
   // 4. Standalone Prepositional phrase:
-  // e.g. "for them", "for you", "to him", "in the morning", "for Fatima"
+  // e.g. "for them", "for you", "in the morning", "for Fatima"
+  // Note: "to [person]" cannot directly follow copula "be" (*Somebody is to a sister, *He is to me);
+  // it requires an evaluative adjective ("good to him") or indefinite role noun ("a friend to me").
   if (TRUE_PREPOSITIONS.has(rest[0])) {
+    if (rest[0] === 'to') {
+      return {
+        isValid: false,
+        reason: `Preposition "to" cannot directly follow copula "be" — use an evaluative adjective ("good to ...") or indefinite role ("a friend to ...")`,
+      };
+    }
     const prepParse = parsePrepositionalPhrase(rest);
     if (prepParse.valid && prepParse.length === rest.length) {
+      if (
+        rest[0] === 'for' &&
+        subjectTokens &&
+        subjectTokens.length > 0 &&
+        getSemanticCategory(subjectTokens) === 'human' &&
+        !isHumanEntity(rest.slice(1))
+      ) {
+        return {
+          isValid: false,
+          reason: `Semantic mismatch: Human subject "${subjectTokens.join(' ')}" cannot be paired with "${rest.join(' ')}"`,
+        };
+      }
       return {
         isValid: true,
         ruleName: 'Subject + Copula Verb + Prepositional Complement',
@@ -940,18 +1330,71 @@ export function validateCopulaComplement(
   const np = parseNounPhrase(rest, 0);
   const compTokens = np.valid ? rest.slice(0, np.length) : [];
   const trailingTokens = np.valid ? rest.slice(np.length) : [];
-  const trailingCheck = trailingTokens.length === 0 ? { valid: true } : parseTrailingAdverbials(trailingTokens);
+  const allowTrailingTo = compTokens.length >= 2 && HUMAN_NOUNS.has(compTokens[compTokens.length - 1]);
+  const trailingCheck =
+    trailingTokens.length === 0
+      ? { valid: true }
+      : parseTrailingAdverbials(trailingTokens, { allowTo: allowTrailingTo });
   if (np.valid && trailingCheck.valid) {
+    // Bare demonstrative pronouns (this, that, these, those) cannot serve as copula complements
+    // even when followed by trailing adverbials (e.g. "Oliver is this here", "He is that in the morning").
+    if (
+      compTokens.length === 1 &&
+      (DEMONSTRATIVES_SINGULAR.has(compTokens[0]) || DEMONSTRATIVES_PLURAL.has(compTokens[0]))
+    ) {
+      const subjStr = subjectTokens ? subjectTokens.join(' ') : 'Subject';
+      return {
+        isValid: false,
+        reason: `Demonstrative pronoun "${compTokens[0]}" cannot be used as a copula complement (cannot say "${subjStr} is ${rest.join(' ')}")`,
+      };
+    }
+    // Bare "it" cannot be used as a predicate nominative for a human subject or with trailing adverbials (e.g. "Oliver is it here")
+    if (
+      compTokens.length === 1 &&
+      compTokens[0] === 'it' &&
+      (trailingTokens.length > 0 || (subjectTokens && getSemanticCategory(subjectTokens) === 'human'))
+    ) {
+      return {
+        isValid: false,
+        reason: `Pronoun "it" cannot be used as a copula complement in "${rest.join(' ')}"`,
+      };
+    }
+    // Bare personal pronouns (you, me, him, her, us, them) as copula complements are only valid
+    // with singular identifying subjects ("It is you", "Was that you?", "This is me"),
+    // NOT plural demonstratives ("Were those you?") or human subjects ("He is me", "They are us").
+    if (compTokens.length === 1 && HUMAN_OBJECT_PRONOUNS.has(compTokens[0])) {
+      const isSingularIdentifyingSubj =
+        subjectTokens &&
+        subjectTokens.length === 1 &&
+        ['it', 'this', 'that'].includes(subjectTokens[0]);
+      if (!isSingularIdentifyingSubj || trailingTokens.length > 0) {
+        const subjStr = subjectTokens ? subjectTokens.join(' ') : 'Subject';
+        return {
+          isValid: false,
+          reason: `Personal pronoun "${compTokens[0]}" cannot be used as a copula complement for "${subjStr}"`,
+        };
+      }
+    }
+    // Singular countable common nouns require a determiner as copula predicate nominative ("a father", not "father")
+    if (compTokens.length === 1 && ['father', 'mother', 'brother', 'sister'].includes(compTokens[0])) {
+      return {
+        isValid: false,
+        reason: `Singular countable noun "${compTokens[0]}" requires a determiner (e.g. "a ${compTokens[0]}", "my ${compTokens[0]}")`,
+      };
+    }
     // Disallow awkward/nonsensical trailing modifiers on human role predicate nouns
-    // (e.g. allow "a friend to me", "a father here", "a father for them",
-    // but reject "a friend for her name", "a friend for a thing", "a friend in the morning")
+    // Relational "to [person]" / "for [person]" and locatives ("here"/"there") only attach to
+    // indefinite role nouns ("a friend to me", "a father here", "a father for them"),
+    // NOT possessive/definite nouns (*She is her sister to the friend, *their mother there).
     if (trailingTokens.length > 0 && getSemanticCategory(compTokens) === 'human') {
       const firstTrail = trailingTokens[0];
+      const isIndefiniteRole = compTokens[0] === 'a';
       const trailValidForHuman =
-        firstTrail === 'here' ||
-        firstTrail === 'there' ||
-        firstTrail === 'to' ||
-        (firstTrail === 'for' && isHumanEntity(trailingTokens.slice(1)));
+        isIndefiniteRole &&
+        (firstTrail === 'here' ||
+          firstTrail === 'there' ||
+          firstTrail === 'to' ||
+          (firstTrail === 'for' && isHumanEntity(trailingTokens.slice(1))));
       if (!trailValidForHuman) {
         return {
           isValid: false,
@@ -959,15 +1402,6 @@ export function validateCopulaComplement(
         };
       }
     }
-    // Disallow bare indefinite pronouns ("some body", "some thing") as copula predicate nominatives,
-    // while allowing qualified forms like "some thing big" (e.g. "It is some thing big") when semantically compatible.
-    if (isBareIndefinitePronounPhrase(compTokens)) {
-      return {
-        isValid: false,
-        reason: `Indefinite pronoun "${compTokens.join(' ')}" cannot be used as a copula complement`,
-      };
-    }
-
     if (subjectTokens) {
       const subjIndef = getIndefiniteBase(subjectTokens);
       const compIndef = getIndefiniteBase(compTokens);
@@ -996,9 +1430,31 @@ export function validateCopulaComplement(
       const compCat = getSemanticCategory(compTokens);
 
       if (!isNegated) {
+        // Two proper names cannot be equated via copula ("Was George Bob?", "George is Bob")
+        const subjIsProperName = subjectTokens.length === 1 && isProperNameToken(subjectTokens[0]);
+        const compIsProperName = compTokens.length === 1 && isProperNameToken(compTokens[0]);
+        if (subjIsProperName && compIsProperName) {
+          return {
+            isValid: false,
+            reason: `Semantic mismatch: Proper name "${subjectTokens[0]}" cannot be equated with proper name "${compTokens[0]}"`,
+          };
+        }
+        // Indefinite pronouns ("somebody", "some body", "something") cannot be equated with a specific proper name ("Is somebody Bob?")
+        if (getIndefiniteBase(subjectTokens) && compIsProperName) {
+          return {
+            isValid: false,
+            reason: `Semantic mismatch: Indefinite pronoun "${subjectTokens.join(' ')}" cannot be equated with proper name "${compTokens[0]}"`,
+          };
+        }
+        // Specific human subjects (proper names, "he", "she", "the brother") cannot be equated with bare indefinite pronouns (*Ali was some body)
+        if (subjCat === 'human' && getIndefiniteBase(compTokens)) {
+          return {
+            isValid: false,
+            reason: `Semantic mismatch: Human subject "${subjectTokens.join(' ')}" cannot be equated with indefinite pronoun "${compTokens.join(' ')}"`,
+          };
+        }
         // Human subjects cannot equate to non-human nouns (night, morning, thing, name),
         // EXCEPT proper names equating to "name" (e.g., "Sarah is a good name", "Ali is my name").
-        const subjIsProperName = subjectTokens.length === 1 && isProperNameToken(subjectTokens[0]);
         if (
           subjCat === 'human' &&
           (compCat === 'time' || compCat === 'object' || (compCat === 'name' && !subjIsProperName))
@@ -1029,11 +1485,23 @@ export function validateCopulaComplement(
             reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot be "${compTokens.join(' ')}"`,
           };
         }
-        // Gender consistency for "he" / "she" / "father" / "mother" / "brother" / "sister"
+        // Gender consistency for "he" / "she" / "father" / "mother" / "brother" / "sister" and proper names
         const subjLast = subjectTokens[subjectTokens.length - 1];
         const compLast = compTokens[compTokens.length - 1];
-        const maleWords = new Set(['he', 'father', 'brother']);
-        const femaleWords = new Set(['she', 'mother', 'sister']);
+        const maleWords = new Set([
+          'he', 'father', 'brother',
+          'bob', 'dan', 'tom', 'ali', 'sam', 'leo',
+          'john', 'mark', 'jack', 'zaid',
+          'peter', 'james', 'david', 'henry', 'tariq', 'hasan',
+          'george', 'robert', 'oliver', 'edward', 'khalid',
+        ]);
+        const femaleWords = new Set([
+          'she', 'mother', 'sister',
+          'mia', 'amy',
+          'mary', 'sara', 'emma', 'lucy', 'noor',
+          'sarah', 'alice', 'emily',
+          'fatima', 'sophia', 'hannah',
+        ]);
         if (
           (maleWords.has(subjLast) && femaleWords.has(compLast)) ||
           (femaleWords.has(subjLast) && maleWords.has(compLast))
@@ -1094,25 +1562,35 @@ function validateDeclarativePredicate(
       return { isValid: false, reason: `Incomplete statement: Verb "${verbToken}" requires an object` };
     }
 
-    let rest = predicateTokens;
-    if (rest[0] === 'not') {
-      rest = rest.slice(1);
-      if (rest.length === 0) return { isValid: false, reason: 'Missing object after "not"' };
+    // Per British Council LearnEnglish Grammar, lexical "have/has/had" (possession) cannot take
+    // direct "not" negation (*Something had not these, *He has not a friend); it requires do-support.
+    if (predicateTokens[0] === 'not') {
+      const doSupportSuggestion =
+        verbToken === 'has' ? 'does not have' : verbToken === 'had' ? 'did not have' : 'do not have';
+      return {
+        isValid: false,
+        reason: `Main verb "${verbToken}" cannot be negated directly with "not" (use "${doSupportSuggestion}")`,
+      };
     }
 
     // Object can be an object pronoun or valid noun phrase (+ optional trailing adverbial), never a subject-only pronoun like "we"
-    const objRes = parseObjectWithTrailing(rest);
+    const objRes = validateHaveObjectWithTrailing(subjectTokens, predicateTokens);
     if (objRes.valid) {
+      const trailTag = buildTrailingClauseTag(objRes.trailingTokens);
+      const baseRule =
+        objRes.objTokens.length === 1 && OBJECT_PRONOUNS.has(objRes.objTokens[0])
+          ? 'Subject + Verb "Have" + Object Pronoun'
+          : 'Subject + Verb "Have" + Noun Phrase Object';
       return {
         isValid: true,
-        ruleName:
-          objRes.objTokens.length === 1 && OBJECT_PRONOUNS.has(objRes.objTokens[0])
-            ? 'Subject + Verb "Have" + Object Pronoun'
-            : 'Subject + Verb "Have" + Noun Phrase Object',
-        ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + transitive verb "${verbToken}" + object "${rest.join(' ')}".`,
+        ruleName: `${baseRule}${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + transitive verb "${verbToken}" + direct object "${objRes.objTokens.join(' ')}"${trailTag.descPart}.`,
       };
     }
-    return { isValid: false, reason: objRes.reason || `Invalid object "${rest.join(' ')}" for verb "${verbToken}"` };
+    return {
+      isValid: false,
+      reason: objRes.reason || `Invalid object "${predicateTokens.join(' ')}" for verb "${verbToken}"`,
+    };
   }
 
   // Do-support auxiliary ("does not have", "did not do", "does have") or main verb "do/does/did"
@@ -1145,12 +1623,13 @@ function validateDeclarativePredicate(
       const subObj = afterNot.slice(1);
       if (baseVerb === 'have') {
         if (subObj.length === 0) return { isValid: false, reason: 'Missing object after "have"' };
-        const objRes = parseObjectWithTrailing(subObj);
+        const objRes = validateHaveObjectWithTrailing(subjectTokens, subObj);
         if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+        const trailTag = buildTrailingClauseTag(objRes.trailingTokens);
         return {
           isValid: true,
-          ruleName: `Do-Support ("${verbToken}${isNegated ? ' not' : ''} have")`,
-          ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + "${verbToken}${isNegated ? ' not' : ''} have" + object "${subObj.join(' ')}".`,
+          ruleName: `Do-Support ("${verbToken}${isNegated ? ' not' : ''} have")${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + "${verbToken}${isNegated ? ' not' : ''} have" + direct object "${objRes.objTokens.join(' ')}"${trailTag.descPart}.`,
         };
       }
       if (baseVerb === 'name') {
@@ -1161,12 +1640,15 @@ function validateDeclarativePredicate(
           };
         }
         if (subObj.length === 0) return { isValid: false, reason: 'Missing object after "name"' };
-        const objRes = parseObjectWithTrailing(subObj);
+        const objRes = parseNameObjectWithTrailing(subObj);
         if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+        const trailTag = buildTrailingClauseTag(objRes.trailingTokens);
+        const directObjStr = (objRes.objTokens ?? subObj).join(' ');
+        const nameCompStr = objRes.nameTokens?.length ? ` + object complement "${objRes.nameTokens.join(' ')}"` : '';
         return {
           isValid: true,
-          ruleName: `Do-Support ("${verbToken}${isNegated ? ' not' : ''} name")`,
-          ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + "${verbToken}${isNegated ? ' not' : ''} name" + object "${subObj.join(' ')}".`,
+          ruleName: `Do-Support ("${verbToken}${isNegated ? ' not' : ''} name")${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + "${verbToken}${isNegated ? ' not' : ''} name" + direct object "${directObjStr}"${nameCompStr}${trailTag.descPart}.`,
         };
       }
       // baseVerb === 'do'
@@ -1178,10 +1660,12 @@ function validateDeclarativePredicate(
       }
       const doObjCheck = validateDoObjectWithTrailing(subObj);
       if (!doObjCheck.isValid) return { isValid: false, reason: doObjCheck.reason };
+      const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+      const directObj = (doObjCheck.objTokens ?? subObj).join(' ');
       return {
         isValid: true,
-        ruleName: `Do-Support ("${verbToken}${isNegated ? ' not' : ''} do")`,
-        ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + "${verbToken}${isNegated ? ' not' : ''} do" + object "${subObj.join(' ')}".`,
+        ruleName: `Do-Support ("${verbToken}${isNegated ? ' not' : ''} do")${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + "${verbToken}${isNegated ? ' not' : ''} do" + direct object "${directObj}"${trailTag.descPart}.`,
       };
     }
 
@@ -1196,10 +1680,12 @@ function validateDeclarativePredicate(
     if (!doObjCheck.isValid) {
       return { isValid: false, reason: doObjCheck.reason };
     }
+    const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+    const directObj = (doObjCheck.objTokens ?? predicateTokens).join(' ');
     return {
       isValid: true,
-      ruleName: 'Subject + Verb "Do" + Direct Object',
-      ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + action verb "${verbToken}" + object "${predicateTokens.join(' ')}".`,
+      ruleName: `Subject + Verb "Do" + Direct Object${trailTag.ruleSuffix}`,
+      ruleExplanation: `Rule 4: Subject "${subjectTokens.join(' ')}" + action verb "${verbToken}" + direct object "${directObj}"${trailTag.descPart}.`,
     };
   }
 
@@ -1223,6 +1709,12 @@ function validateDeclarativePredicate(
 
     const subPred = rest.slice(1);
     if (baseVerb === 'be') {
+      if (subPred[0] === 'not') {
+        return {
+          isValid: false,
+          reason: `Negation "not" must precede "be" (use "${verbToken} not be ...")`,
+        };
+      }
       const copResult = validateCopulaComplement(subPred, subjectTokens, subjectNumber, modalNegated);
       if (!copResult.isValid) return copResult;
       return {
@@ -1233,12 +1725,13 @@ function validateDeclarativePredicate(
     }
     if (baseVerb === 'have') {
       if (subPred.length === 0) return { isValid: false, reason: 'Missing object for "have"' };
-      const objRes = parseObjectWithTrailing(subPred);
+      const objRes = validateHaveObjectWithTrailing(subjectTokens, subPred);
+      if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+      const trailTag = buildTrailingClauseTag(objRes.trailingTokens);
       return {
-        isValid: objRes.valid,
-        reason: objRes.reason,
-        ruleName: `Modal Auxiliary "${verbToken}" + Base "have" + Object`,
-        ruleExplanation: `Rule 4: Modal predicate with "${verbToken} have" and object "${subPred.join(' ')}".`,
+        isValid: true,
+        ruleName: `Modal Auxiliary "${verbToken}" + Base "have" + Direct Object${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Modal predicate with "${verbToken}${modalNegated ? ' not' : ''} have" + direct object "${objRes.objTokens.join(' ')}"${trailTag.descPart}.`,
       };
     }
     if (baseVerb === 'name') {
@@ -1249,12 +1742,15 @@ function validateDeclarativePredicate(
         };
       }
       if (subPred.length === 0) return { isValid: false, reason: 'Missing object for "name"' };
-      const objRes = parseObjectWithTrailing(subPred);
+      const objRes = parseNameObjectWithTrailing(subPred);
+      if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+      const trailTag = buildTrailingClauseTag(objRes.trailingTokens);
+      const directObjStr = (objRes.objTokens ?? subPred).join(' ');
+      const nameCompStr = objRes.nameTokens?.length ? ` + object complement "${objRes.nameTokens.join(' ')}"` : '';
       return {
-        isValid: objRes.valid,
-        reason: objRes.reason,
-        ruleName: `Modal Auxiliary "${verbToken}" + Base "name" + Object`,
-        ruleExplanation: `Rule 4: Modal predicate with "${verbToken} name" and object "${subPred.join(' ')}".`,
+        isValid: true,
+        ruleName: `Modal Auxiliary "${verbToken}" + Base "name" + Direct Object${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Modal predicate with "${verbToken}${modalNegated ? ' not' : ''} name" + direct object "${directObjStr}"${nameCompStr}${trailTag.descPart}.`,
       };
     }
     if (baseVerb === 'do') {
@@ -1266,10 +1762,12 @@ function validateDeclarativePredicate(
       }
       const doObjCheck = validateDoObjectWithTrailing(subPred);
       if (!doObjCheck.isValid) return { isValid: false, reason: doObjCheck.reason };
+      const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+      const directObj = (doObjCheck.objTokens ?? subPred).join(' ');
       return {
         isValid: true,
-        ruleName: `Modal Auxiliary "${verbToken}" + Base "do" + Object`,
-        ruleExplanation: `Rule 4: Modal predicate with "${verbToken} do" and object "${subPred.join(' ')}".`,
+        ruleName: `Modal Auxiliary "${verbToken}" + Base "do" + Direct Object${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Modal predicate with "${verbToken}${modalNegated ? ' not' : ''} do" + direct object "${directObj}"${trailTag.descPart}.`,
       };
     }
   }
@@ -1296,6 +1794,38 @@ function validateDeclarativeSentence(words: string[]): {
   }
 
   if (verbIdx === -1) {
+    // Support present simple finite verb "name" with non-3rd-person-singular subjects (e.g. "I name him Ali", "They name a thing")
+    for (let i = 1; i < words.length - 1; i++) {
+      if (words[i] === 'name') {
+        const subjTokens = words.slice(0, i);
+        const subjNp = parseNounPhrase(subjTokens, 0, false);
+        if (
+          subjNp.valid &&
+          subjNp.length === subjTokens.length &&
+          (subjNp.number === 'i' || subjNp.number === 'you' || subjNp.number === 'plural')
+        ) {
+          if (!canSubjectPerformDo(subjTokens)) {
+            return {
+              isValid: false,
+              reason: `Semantic mismatch: "${subjTokens.join(' ')}" cannot perform verb "name"`,
+            };
+          }
+          const nameArgs = words.slice(i + 1);
+          const objRes = parseNameObjectWithTrailing(nameArgs);
+          if (objRes.valid) {
+            const trailTag = buildTrailingClauseTag(objRes.trailingTokens);
+            const directObjStr = (objRes.objTokens ?? nameArgs).join(' ');
+            const nameCompStr = objRes.nameTokens?.length ? ` + object complement "${objRes.nameTokens.join(' ')}"` : '';
+            return {
+              isValid: true,
+              ruleName: `Subject + Verb "Name" + Direct Object${trailTag.ruleSuffix}`,
+              ruleExplanation: `Rule 4: Subject "${subjTokens.join(' ')}" + verb "name" + direct object "${directObjStr}"${nameCompStr}${trailTag.descPart}.`,
+            };
+          }
+          return { isValid: false, reason: objRes.reason || 'Invalid object after "name"' };
+        }
+      }
+    }
     return { isValid: false, reason: 'Incomplete statement: Missing verb or predicate' };
   }
 
@@ -1377,6 +1907,16 @@ function validateInvertedQuestion(words: string[]): {
       const subjStart = afterThere[0] === 'not' ? afterThere.slice(1) : afterThere;
       const exNp = parseNounPhrase(subjStart, 0, true);
       if (exNp.valid && exNp.number === 'singular') {
+        const exSubj = subjStart.slice(0, exNp.length);
+        const isBareDemOrProper =
+          exSubj.length === 1 &&
+          (DEMONSTRATIVES_SINGULAR.has(exSubj[0]) || isProperNameToken(exSubj[0]));
+        if (isBareDemOrProper) {
+          return {
+            isValid: false,
+            reason: `Existential question "${words.join(' ')}" cannot take "${exSubj[0]}" (use "${first} ${exSubj[0]} there")`,
+          };
+        }
         const trailOk = parseTrailingAdverbials(subjStart.slice(exNp.length)).valid;
         if (trailOk) {
           return {
@@ -1407,8 +1947,50 @@ function validateInvertedQuestion(words: string[]): {
     };
   }
 
-  // 2. Are / Were: expects Plural Subject (or "you") + Copula Complement
+  // 2. Are / Were: expects Plural Subject (or "you") + Copula Complement, or Existential "Are/Were there [not] plural NP [adverbial]"
   if (first === 'are' || first === 'were') {
+    if (rest[0] === 'there') {
+      const afterThere = rest.slice(1);
+      const subjStart = afterThere[0] === 'not' ? afterThere.slice(1) : afterThere;
+      if (subjStart.length > 0 && !isPersonalPronounToken(subjStart[0])) {
+        const exNp = parseNounPhrase(subjStart, 0, false);
+        if (exNp.valid && exNp.number === 'plural') {
+          const exSubj = subjStart.slice(0, exNp.length);
+          if (exSubj.length === 1 && DEMONSTRATIVES_PLURAL.has(exSubj[0])) {
+            return {
+              isValid: false,
+              reason: `Existential question "${words.join(' ')}" cannot take bare demonstrative "${exSubj[0]}" (use "${first} ${exSubj[0]} there")`,
+            };
+          }
+          if (parseTrailingAdverbials(subjStart.slice(exNp.length)).valid) {
+            return {
+              isValid: true,
+              ruleName: 'Existential Interrogative ("Are/Were there")',
+              ruleExplanation: `Rule 4: Existential question "${words.join(' ')}".`,
+            };
+          }
+        }
+        for (let andIdx = 1; andIdx < subjStart.length - 1; andIdx++) {
+          if (subjStart[andIdx] === 'and') {
+            const leftToks = subjStart.slice(0, andIdx);
+            const leftNp = parseNounPhrase(leftToks, 0, false);
+            if (leftNp.valid && leftNp.length === leftToks.length) {
+              const afterAnd = subjStart.slice(andIdx + 1);
+              const rightNp = parseNounPhrase(afterAnd, 0, true);
+              if (rightNp.valid && parseTrailingAdverbials(afterAnd.slice(rightNp.length)).valid) {
+                return {
+                  isValid: true,
+                  ruleName: 'Existential Interrogative ("Are/Were there" + Compound Subject)',
+                  ruleExplanation: `Rule 4: Existential plural question "${words.join(' ')}".`,
+                };
+              }
+            }
+          }
+        }
+      }
+      return { isValid: false, reason: `Invalid existential question "${words.join(' ')}"` };
+    }
+
     const subjectNp = parseNounPhrase(rest, 0, false);
     if (!subjectNp.valid) {
       return { isValid: false, reason: subjectNp.reason || `Invalid subject after "${first}"` };
@@ -1450,12 +2032,24 @@ function validateInvertedQuestion(words: string[]): {
       if (baseVerb === 'name' && !canSubjectPerformDo(subjectTokens)) {
         return { isValid: false, reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot perform verb "name"` };
       }
-      const objRes = parseObjectWithTrailing(subComplement);
-      if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+      if (baseVerb === 'name') {
+        const nameRes = parseNameObjectWithTrailing(subComplement);
+        if (!nameRes.valid) return { isValid: false, reason: nameRes.reason };
+        const trailTag = buildTrailingClauseTag(nameRes.trailingTokens);
+        const directObjStr = (nameRes.objTokens ?? subComplement).join(' ');
+        return {
+          isValid: true,
+          ruleName: `Inverted Interrogative ("Does" Question)${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Question with auxiliary "does" + subject "${subjectTokens.join(' ')}" + verb "name" + direct object "${directObjStr}"${trailTag.descPart}.`,
+        };
+      }
+      const haveRes = validateHaveObjectWithTrailing(subjectTokens, subComplement);
+      if (!haveRes.valid) return { isValid: false, reason: haveRes.reason };
+      const trailTag = buildTrailingClauseTag(haveRes.trailingTokens);
       return {
         isValid: true,
-        ruleName: 'Inverted Interrogative ("Does" Question)',
-        ruleExplanation: `Rule 4: Question with auxiliary "does" + subject "${subjectTokens.join(' ')}" + verb "${baseVerb}" + object "${subComplement.join(' ')}".`,
+        ruleName: `Inverted Interrogative ("Does" Question)${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Question with auxiliary "does" + subject "${subjectTokens.join(' ')}" + verb "have" + direct object "${haveRes.objTokens.join(' ')}"${trailTag.descPart}.`,
       };
     }
     if (baseVerb === 'do') {
@@ -1464,10 +2058,12 @@ function validateInvertedQuestion(words: string[]): {
       }
       const doObjCheck = validateDoObjectWithTrailing(subComplement);
       if (!doObjCheck.isValid) return { isValid: false, reason: doObjCheck.reason };
+      const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+      const directObjStr = (doObjCheck.objTokens ?? subComplement).join(' ');
       return {
         isValid: true,
-        ruleName: 'Inverted Interrogative ("Does" Question)',
-        ruleExplanation: `Rule 4: Question with auxiliary "does" + subject "${subjectTokens.join(' ')}" + verb "do" + object "${subComplement.join(' ')}".`,
+        ruleName: `Inverted Interrogative ("Does" Question)${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Question with auxiliary "does" + subject "${subjectTokens.join(' ')}" + verb "do" + direct object "${directObjStr}"${trailTag.descPart}.`,
       };
     }
   }
@@ -1495,12 +2091,24 @@ function validateInvertedQuestion(words: string[]): {
       if (baseVerb === 'name' && !canSubjectPerformDo(subjectTokens)) {
         return { isValid: false, reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot perform verb "name"` };
       }
-      const objRes = parseObjectWithTrailing(subComplement);
-      if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+      if (baseVerb === 'name') {
+        const nameRes = parseNameObjectWithTrailing(subComplement);
+        if (!nameRes.valid) return { isValid: false, reason: nameRes.reason };
+        const trailTag = buildTrailingClauseTag(nameRes.trailingTokens);
+        const directObjStr = (nameRes.objTokens ?? subComplement).join(' ');
+        return {
+          isValid: true,
+          ruleName: `Inverted Interrogative ("Do" Question)${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Question with auxiliary "do" + subject "${subjectTokens.join(' ')}" + verb "name" + direct object "${directObjStr}"${trailTag.descPart}.`,
+        };
+      }
+      const haveRes = validateHaveObjectWithTrailing(subjectTokens, subComplement);
+      if (!haveRes.valid) return { isValid: false, reason: haveRes.reason };
+      const trailTag = buildTrailingClauseTag(haveRes.trailingTokens);
       return {
         isValid: true,
-        ruleName: 'Inverted Interrogative ("Do" Question)',
-        ruleExplanation: `Rule 4: Question with auxiliary "do" + subject "${subjectTokens.join(' ')}" + verb "${baseVerb}".`,
+        ruleName: `Inverted Interrogative ("Do" Question)${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Question with auxiliary "do" + subject "${subjectTokens.join(' ')}" + verb "have" + direct object "${haveRes.objTokens.join(' ')}"${trailTag.descPart}.`,
       };
     }
     if (baseVerb === 'do') {
@@ -1509,10 +2117,12 @@ function validateInvertedQuestion(words: string[]): {
       }
       const doObjCheck = validateDoObjectWithTrailing(subComplement);
       if (!doObjCheck.isValid) return { isValid: false, reason: doObjCheck.reason };
+      const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+      const directObjStr = (doObjCheck.objTokens ?? subComplement).join(' ');
       return {
         isValid: true,
-        ruleName: 'Inverted Interrogative ("Do" Question)',
-        ruleExplanation: `Rule 4: Question with auxiliary "do" + subject "${subjectTokens.join(' ')}" + verb "do".`,
+        ruleName: `Inverted Interrogative ("Do" Question)${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Question with auxiliary "do" + subject "${subjectTokens.join(' ')}" + verb "do" + direct object "${directObjStr}"${trailTag.descPart}.`,
       };
     }
   }
@@ -1540,12 +2150,24 @@ function validateInvertedQuestion(words: string[]): {
       if (baseVerb === 'name' && !canSubjectPerformDo(subjectTokens)) {
         return { isValid: false, reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot perform verb "name"` };
       }
-      const objRes = parseObjectWithTrailing(subComplement);
-      if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+      if (baseVerb === 'name') {
+        const nameRes = parseNameObjectWithTrailing(subComplement);
+        if (!nameRes.valid) return { isValid: false, reason: nameRes.reason };
+        const trailTag = buildTrailingClauseTag(nameRes.trailingTokens);
+        const directObjStr = (nameRes.objTokens ?? subComplement).join(' ');
+        return {
+          isValid: true,
+          ruleName: `Inverted Interrogative ("Did" Question)${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Past tense question with "did" + subject "${subjectTokens.join(' ')}" + verb "name" + direct object "${directObjStr}"${trailTag.descPart}.`,
+        };
+      }
+      const haveRes = validateHaveObjectWithTrailing(subjectTokens, subComplement);
+      if (!haveRes.valid) return { isValid: false, reason: haveRes.reason };
+      const trailTag = buildTrailingClauseTag(haveRes.trailingTokens);
       return {
         isValid: true,
-        ruleName: 'Inverted Interrogative ("Did" Question)',
-        ruleExplanation: `Rule 4: Past tense question with "did" + subject "${subjectTokens.join(' ')}" + verb "${baseVerb}".`,
+        ruleName: `Inverted Interrogative ("Did" Question)${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Past tense question with "did" + subject "${subjectTokens.join(' ')}" + verb "have" + direct object "${haveRes.objTokens.join(' ')}"${trailTag.descPart}.`,
       };
     }
     if (baseVerb === 'do') {
@@ -1554,10 +2176,12 @@ function validateInvertedQuestion(words: string[]): {
       }
       const doObjCheck = validateDoObjectWithTrailing(subComplement);
       if (!doObjCheck.isValid) return { isValid: false, reason: doObjCheck.reason };
+      const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+      const directObjStr = (doObjCheck.objTokens ?? subComplement).join(' ');
       return {
         isValid: true,
-        ruleName: 'Inverted Interrogative ("Did" Question)',
-        ruleExplanation: `Rule 4: Past tense question with "did" + subject "${subjectTokens.join(' ')}" + verb "do".`,
+        ruleName: `Inverted Interrogative ("Did" Question)${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Past tense question with "did" + subject "${subjectTokens.join(' ')}" + verb "do" + direct object "${directObjStr}"${trailTag.descPart}.`,
       };
     }
   }
@@ -1570,12 +2194,24 @@ function validateInvertedQuestion(words: string[]): {
       if (afterThere[0] === 'be') {
         const subjTokens = afterThere.slice(1);
         const exNp = parseNounPhrase(subjTokens, 0, true);
-        if (exNp.valid && parseTrailingAdverbials(subjTokens.slice(exNp.length)).valid) {
-          return {
-            isValid: true,
-            ruleName: `Existential Modal Question ("${first} there be")`,
-            ruleExplanation: `Rule 4: Existential modal question "${words.join(' ')}".`,
-          };
+        if (exNp.valid) {
+          const exSubj = subjTokens.slice(0, exNp.length);
+          if (
+            exSubj.length === 1 &&
+            (DEMONSTRATIVES_SINGULAR.has(exSubj[0]) || DEMONSTRATIVES_PLURAL.has(exSubj[0]) || isProperNameToken(exSubj[0]))
+          ) {
+            return {
+              isValid: false,
+              reason: `Existential question "${words.join(' ')}" cannot take "${exSubj[0]}"`,
+            };
+          }
+          if (parseTrailingAdverbials(subjTokens.slice(exNp.length)).valid) {
+            return {
+              isValid: true,
+              ruleName: `Existential Modal Question ("${first} there be")`,
+              ruleExplanation: `Rule 4: Existential modal question "${words.join(' ')}".`,
+            };
+          }
         }
         return { isValid: false, reason: exNp.reason || `Invalid existential question "${words.join(' ')}"` };
       }
@@ -1603,12 +2239,24 @@ function validateInvertedQuestion(words: string[]): {
       if (baseVerb === 'name' && !canSubjectPerformDo(subjectTokens)) {
         return { isValid: false, reason: `Semantic mismatch: "${subjectTokens.join(' ')}" cannot perform verb "name"` };
       }
-      const objRes = parseObjectWithTrailing(subComplement);
-      if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+      if (baseVerb === 'name') {
+        const nameRes = parseNameObjectWithTrailing(subComplement);
+        if (!nameRes.valid) return { isValid: false, reason: nameRes.reason };
+        const trailTag = buildTrailingClauseTag(nameRes.trailingTokens);
+        const directObjStr = (nameRes.objTokens ?? subComplement).join(' ');
+        return {
+          isValid: true,
+          ruleName: `Inverted Interrogative ("${first}" Question)${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Modal question with "${first}" + subject "${subjectTokens.join(' ')}" + base verb "name" + direct object "${directObjStr}"${trailTag.descPart}.`,
+        };
+      }
+      const haveRes = validateHaveObjectWithTrailing(subjectTokens, subComplement);
+      if (!haveRes.valid) return { isValid: false, reason: haveRes.reason };
+      const trailTag = buildTrailingClauseTag(haveRes.trailingTokens);
       return {
         isValid: true,
-        ruleName: `Inverted Interrogative ("${first}" Question)`,
-        ruleExplanation: `Rule 4: Modal question with "${first}" + subject "${subjectTokens.join(' ')}" + base verb "${baseVerb}".`,
+        ruleName: `Inverted Interrogative ("${first}" Question)${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Modal question with "${first}" + subject "${subjectTokens.join(' ')}" + base verb "have" + direct object "${haveRes.objTokens.join(' ')}"${trailTag.descPart}.`,
       };
     }
     if (baseVerb === 'do') {
@@ -1617,13 +2265,21 @@ function validateInvertedQuestion(words: string[]): {
       }
       const doObjCheck = validateDoObjectWithTrailing(subComplement);
       if (!doObjCheck.isValid) return { isValid: false, reason: doObjCheck.reason };
+      const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+      const directObjStr = (doObjCheck.objTokens ?? subComplement).join(' ');
       return {
         isValid: true,
-        ruleName: `Inverted Interrogative ("${first}" Question)`,
-        ruleExplanation: `Rule 4: Modal question with "${first}" + subject "${subjectTokens.join(' ')}" + base verb "do".`,
+        ruleName: `Inverted Interrogative ("${first}" Question)${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Modal question with "${first}" + subject "${subjectTokens.join(' ')}" + base verb "do" + direct object "${directObjStr}"${trailTag.descPart}.`,
       };
     }
     if (baseVerb === 'be') {
+      if (subComplement[0] === 'not') {
+        return {
+          isValid: false,
+          reason: `Negation "not" must precede "be" ("${first} ${subjectTokens.join(' ')} not be ...")`,
+        };
+      }
       const copRes = validateCopulaComplement(subComplement, subjectTokens, subjectNp.number, modalNegated);
       if (!copRes.isValid) return copRes;
       return {
@@ -1634,36 +2290,14 @@ function validateInvertedQuestion(words: string[]): {
     }
   }
 
-  // 7. Has / Have: expects Subject + Object NP
-  if (first === 'has') {
-    const subjectNp = parseNounPhrase(rest, 0, false);
-    if (!subjectNp.valid || subjectNp.number !== 'singular') {
-      return { isValid: false, reason: subjectNp.reason || '"Has" requires a singular subject' };
-    }
-    const subjectTokens = rest.slice(0, subjectNp.length);
-    const subComplement = rest.slice(subjectNp.length);
-    const objRes = parseObjectWithTrailing(subComplement);
-    if (!objRes.valid) return { isValid: false, reason: objRes.reason };
+  // 7. Has / Have: per British Council LearnEnglish Grammar, lexical "have/has" cannot invert directly
+  // without do-support (*Has father them, *Have you a friend -> use Does father have them / Do you have...)
+  if (first === 'has' || first === 'have') {
     return {
-      isValid: true,
-      ruleName: 'Inverted Interrogative ("Has" Question)',
-      ruleExplanation: `Rule 4: Question with "has" + subject "${subjectTokens.join(' ')}" + object "${subComplement.join(' ')}".`,
-    };
-  }
-
-  if (first === 'have') {
-    const subjectNp = parseNounPhrase(rest, 0, false);
-    if (!subjectNp.valid || (subjectNp.number !== 'plural' && subjectNp.number !== 'you')) {
-      return { isValid: false, reason: subjectNp.reason || '"Have" requires a plural subject or "you"' };
-    }
-    const subjectTokens = rest.slice(0, subjectNp.length);
-    const subComplement = rest.slice(subjectNp.length);
-    const objRes = parseObjectWithTrailing(subComplement);
-    if (!objRes.valid) return { isValid: false, reason: objRes.reason };
-    return {
-      isValid: true,
-      ruleName: 'Inverted Interrogative ("Have" Question)',
-      ruleExplanation: `Rule 4: Question with "have" + subject "${subjectTokens.join(' ')}" + object "${subComplement.join(' ')}".`,
+      isValid: false,
+      reason: `Main verb "${first}" cannot invert directly to form a question (use "${
+        first === 'has' ? 'Does' : 'Do'
+      } [subject] have ...")`,
     };
   }
 
@@ -1671,8 +2305,228 @@ function validateInvertedQuestion(words: string[]): {
 }
 
 /**
- * Validates a WH-Question (starts with where, when, who, what, why, how)
- * e.g. "Where am I?", "Where is he?", "How old is he?", "What is that?", "Who am I?"
+ * Validates Nominal / Uninverted WH-Clauses (British Council LearnEnglish Grammar: Nominal wh-clauses)
+ * Validates uninverted nominal/exclamative WH-clauses (British Council LearnEnglish):
+ * e.g. "Who he is", "What it is", "How old he is"
+ * Rejects incomplete standalone uninverted adverbial clauses ("Where they were"),
+ * 1st/2nd person or plural uninverted "who" clauses ("Who you are"), uninverted "whose/which" clauses
+ * ("Whose name those were", "Which these have"), and uninverted transitive object/manner clauses
+ * ("Who somebody can have", "How John has a sister for something big").
+ */
+function validateNominalWhClause(words: string[]): {
+  isValid: boolean;
+  attemptedSubjectFirst?: boolean;
+  reason?: string;
+  ruleName?: string;
+  ruleExplanation?: string;
+} {
+  if (words.length < 3 || !WH_QUESTION_WORDS.has(words[0])) {
+    return { isValid: false };
+  }
+
+  const wh = words[0];
+  const rest = words.slice(1);
+
+  const validateGapClauseWithSubject = (
+    effectiveWh: string,
+    subjectStartIdx: number
+  ): {
+    isValid: boolean;
+    attemptedSubjectFirst?: boolean;
+    reason?: string;
+    ruleName?: string;
+    ruleExplanation?: string;
+  } => {
+    const subjectNp = parseNounPhrase(words, subjectStartIdx, false);
+    if (!subjectNp.valid) {
+      return { isValid: false };
+    }
+
+    const subjectTokens = words.slice(subjectStartIdx, subjectStartIdx + subjectNp.length);
+    const afterSubj = words.slice(subjectStartIdx + subjectNp.length);
+    if (afterSubj.length === 0) {
+      return { isValid: false };
+    }
+
+    const verbToken = afterSubj[0];
+    if (!ALL_VERBS.has(verbToken)) {
+      return { isValid: false };
+    }
+
+    const agreement = checkSubjectVerbAgreement(subjectNp.number, verbToken);
+    if (!agreement.isValid) {
+      return { isValid: false, attemptedSubjectFirst: true, reason: agreement.reason };
+    }
+
+    const tail = afterSubj.slice(1);
+    const subjCat = getSemanticCategory(subjectTokens);
+    const isProperSingle = subjectTokens.length === 1 && isProperNameToken(subjectTokens[0]);
+
+    // Standalone uninverted adverbial WH-clauses ("Where they were", "When he was", "Why she is")
+    // are incomplete dependent clauses and cannot stand alone as complete sentences.
+    if (effectiveWh === 'where' || effectiveWh === 'when' || effectiveWh === 'why') {
+      const canInvertVerb = ['is', 'am', 'are', 'was', 'were', 'can', 'will'].includes(verbToken);
+      return {
+        isValid: false,
+        attemptedSubjectFirst: true,
+        reason: canInvertVerb
+          ? `Incomplete dependent clause: "${words.join(' ')}" cannot stand alone — invert the verb ("${effectiveWh} ${verbToken} ${subjectTokens.join(' ')}") to form a complete question`
+          : `Incomplete dependent clause: "${words.join(' ')}" cannot stand alone without a main clause`,
+      };
+    }
+
+    // 1. Copula verb: is, was (and reject are/am/were with "who/what" uninverted like "Who you are")
+    if (['is', 'am', 'are', 'was', 'were'].includes(verbToken)) {
+      const tailNoNot = tail[0] === 'not' ? tail.slice(1) : tail;
+
+      if (effectiveWh === 'who') {
+        if (tailNoNot.length === 0) {
+          if (subjCat === 'object' || subjCat === 'time' || subjCat === 'name') {
+            return {
+              isValid: false,
+              attemptedSubjectFirst: true,
+              reason: `Use "What" rather than "Who" for non-person "${subjectTokens.join(' ')}"`,
+            };
+          }
+          // Restrict standalone uninverted "Who + Subject + Be" strictly to 3rd-person singular personal pronouns ("Who he is", "Who she is"),
+          // rejecting incomplete dependent clauses ("Who you are", "Who somebody was", "Who Oliver is")
+          if (subjectTokens.length !== 1 || (subjectTokens[0] !== 'he' && subjectTokens[0] !== 'she')) {
+            return {
+              isValid: false,
+              attemptedSubjectFirst: true,
+              reason: `Incomplete dependent clause: invert the verb ("Who ${verbToken} ${subjectTokens.join(' ')}") to form a complete question`,
+            };
+          }
+          return {
+            isValid: true,
+            ruleName: 'Nominal WH-Clause ("Who + Subject + Be")',
+            ruleExplanation: `Rule 4: British Council nominal WH-clause "${words.join(' ')}".`,
+          };
+        }
+        return {
+          isValid: false,
+          attemptedSubjectFirst: true,
+          reason: `"who" already fills the predicate of "${verbToken}" — extra words "${tail.join(' ')}" are not allowed`,
+        };
+      }
+
+      if (effectiveWh === 'what') {
+        if (tailNoNot.length === 0) {
+          if (subjCat === 'human' && isProperSingle) {
+            return {
+              isValid: false,
+              attemptedSubjectFirst: true,
+              reason: `Use "Who" rather than "What" when referring to person "${subjectTokens.join(' ')}"`,
+            };
+          }
+          // Restrict standalone uninverted "What + Subject + Be" strictly to neutral pronoun "it" ("What it is"),
+          // rejecting incomplete dependent clauses like "What that was" or "What this is"
+          if (subjectTokens.length !== 1 || subjectTokens[0] !== 'it') {
+            return {
+              isValid: false,
+              attemptedSubjectFirst: true,
+              reason: `Incomplete dependent clause: invert the verb ("What ${verbToken} ${subjectTokens.join(' ')}") to form a complete question`,
+            };
+          }
+          return {
+            isValid: true,
+            ruleName: 'Nominal WH-Clause ("What + Subject + Be")',
+            ruleExplanation: `Rule 4: British Council nominal WH-clause "${words.join(' ')}".`,
+          };
+        }
+        return {
+          isValid: false,
+          attemptedSubjectFirst: true,
+          reason: `"what" already fills the predicate of "${verbToken}" — extra words "${tail.join(' ')}" are not allowed`,
+        };
+      }
+
+      if (effectiveWh === 'how_adj') {
+        if (tailNoNot.length === 0) {
+          return {
+            isValid: true,
+            ruleName: 'Nominal WH-Clause ("How + Adjective + Subject + Be")',
+            ruleExplanation: `Rule 4: British Council degree exclamative/nominal clause "${words.join(' ')}".`,
+          };
+        }
+        return {
+          isValid: false,
+          attemptedSubjectFirst: true,
+          reason: `Unexpected words "${tail.join(' ')}" after "${verbToken}" in "${words.join(' ')}"`,
+        };
+      }
+
+      if (effectiveWh === 'how' && tail.length > 0) {
+        return {
+          isValid: false,
+          attemptedSubjectFirst: true,
+          reason: `"how" already fills the state/manner complement of "${verbToken}" — cannot also take "${tail.join(' ')}"`,
+        };
+      }
+
+      return {
+        isValid: false,
+        attemptedSubjectFirst: true,
+        reason: `Incomplete dependent clause: invert the verb ("${wh} ${verbToken} ${subjectTokens.join(' ')}...") to form a complete question`,
+      };
+    }
+
+    // 2. Modals, do-support, or lexical main verbs cannot form standalone uninverted WH-clauses
+    // (e.g. "*Which these have", "*Who somebody can have", "*How John has a sister for something big")
+    if (verbToken === 'can' || verbToken === 'will' || verbToken === 'do' || verbToken === 'does' || verbToken === 'did') {
+      return {
+        isValid: false,
+        attemptedSubjectFirst: true,
+        reason: `Incomplete dependent clause: invert "${verbToken}" before "${subjectTokens.join(' ')}" to form a complete question`,
+      };
+    }
+
+    if (verbToken === 'have' || verbToken === 'has' || verbToken === 'had') {
+      if (tail[0] === 'not') {
+        const doSupp = verbToken === 'has' ? 'does not have' : verbToken === 'had' ? 'did not have' : 'do not have';
+        return {
+          isValid: false,
+          attemptedSubjectFirst: true,
+          reason: `Main verb "${verbToken}" cannot be negated directly with "not" (use "${doSupp}")`,
+        };
+      }
+      return {
+        isValid: false,
+        attemptedSubjectFirst: true,
+        reason: `Incomplete dependent clause: "${words.join(' ')}" cannot stand alone without a main clause or auxiliary inversion`,
+      };
+    }
+
+    return { isValid: false };
+  };
+
+  // Case A: "how + Adjective + Subject + Verb" (e.g. "How old he is", "How good it was")
+  if (wh === 'how' && ADJECTIVES.has(rest[0]) && words.length >= 4) {
+    const resAdj = validateGapClauseWithSubject('how_adj', 2);
+    if (resAdj.isValid || resAdj.attemptedSubjectFirst) return resAdj;
+  }
+
+  // Reject uninverted "whose/which + Noun + Subject + Verb" (e.g. "Whose Name Those Were")
+  if ((wh === 'whose' || wh === 'which') && !ARTICLES.has(rest[0]) && !POSSESSIVES.has(rest[0])) {
+    const repDet = wh === 'whose' ? 'his' : 'the';
+    const npCheck = parseNounPhrase([repDet, ...rest], 0, false);
+    if (npCheck.valid && npCheck.length >= 2) {
+      return {
+        isValid: false,
+        attemptedSubjectFirst: true,
+        reason: `Incomplete dependent clause: invert the verb after "${wh} ${rest.slice(0, npCheck.length - 1).join(' ')}" to form a complete question`,
+      };
+    }
+  }
+
+  // Case C: Standard uninverted nominal clause: WH + Subject + Verb (e.g. "Who he is", "What it is")
+  return validateGapClauseWithSubject(wh, 1);
+}
+
+/**
+ * Validates a WH-Question (starts with where, when, who, whom, whose, which, what, why, how)
+ * Also supports fronted "To whom ..." and "For whom ..."
+ * e.g. "Where is he?", "Whom did you name?", "Whose friend is here?", "Which thing did you do?"
  */
 function validateWhQuestion(words: string[]): {
   isValid: boolean;
@@ -1680,6 +2534,61 @@ function validateWhQuestion(words: string[]): {
   ruleName?: string;
   ruleExplanation?: string;
 } {
+  // Formal British English fronted prepositional WH-question: "To whom ..." / "For whom ..."
+  if ((words[0] === 'to' || words[0] === 'for') && words[1] === 'whom') {
+    const prep = words[0];
+    const afterWhom = words.slice(2);
+    if (afterWhom.length < 2) {
+      return { isValid: false, reason: `Incomplete question after "${prep} whom"` };
+    }
+    const auxF = afterWhom[0];
+    const afterAuxF = afterWhom.slice(1);
+    if (['is', 'am', 'are', 'was', 'were'].includes(auxF)) {
+      const subjNp = parseNounPhrase(afterAuxF, 0, false);
+      if (subjNp.valid && checkSubjectVerbAgreement(subjNp.number, auxF).isValid) {
+        const tail = afterAuxF.slice(subjNp.length);
+        const tailNoNot = tail[0] === 'not' ? tail.slice(1) : tail;
+        if (tailNoNot.length === 0) {
+          return {
+            isValid: true,
+            ruleName: `Formal Prepositional WH-Question ("${prep} whom")`,
+            ruleExplanation: `Rule 4: British Council formal WH-question "${words.join(' ')}".`,
+          };
+        }
+        if (tailNoNot.length === 1 && EVALUATIVE_ADJECTIVES.has(tailNoNot[0]) && prep === 'to') {
+          return {
+            isValid: true,
+            ruleName: `Formal Prepositional WH-Question ("${prep} whom")`,
+            ruleExplanation: `Rule 4: Evaluative WH-question "${words.join(' ')}".`,
+          };
+        }
+      }
+    }
+    if (['do', 'does', 'did', 'can', 'will'].includes(auxF)) {
+      const subjNp = parseNounPhrase(afterAuxF, 0, false);
+      if (subjNp.valid && checkSubjectVerbAgreement(subjNp.number, auxF).isValid) {
+        let afterSubj = afterAuxF.slice(subjNp.length);
+        if (afterSubj[0] === 'not') afterSubj = afterSubj.slice(1);
+        if (afterSubj.length >= 1 && ['do', 'have', 'name'].includes(afterSubj[0])) {
+          const restObj = afterSubj.slice(1);
+          if (
+            restObj.length === 0 ||
+            (afterSubj[0] === 'do' && validateDoObjectWithTrailing(restObj).isValid) ||
+            (afterSubj[0] === 'name' && parseNameObjectWithTrailing(restObj).valid) ||
+            (afterSubj[0] === 'have' && parseObjectWithTrailing(restObj).valid)
+          ) {
+            return {
+              isValid: true,
+              ruleName: `Formal Prepositional WH-Question ("${prep} whom")`,
+              ruleExplanation: `Rule 4: British Council formal WH-question "${words.join(' ')}".`,
+            };
+          }
+        }
+      }
+    }
+    return { isValid: false, reason: `Invalid formal WH-question "${words.join(' ')}"` };
+  }
+
   const wh = words[0];
   const rest = words.slice(1);
   if (rest.length < 2) {
@@ -1726,14 +2635,63 @@ function validateWhQuestion(words: string[]): {
       const subjectTokens = afterAux.slice(0, subjectNp.length);
       const complementTokens = afterAux.slice(subjectNp.length);
       if (complementTokens.length === 0) {
+        const subjCat = getSemanticCategory(subjectTokens);
+        if (wh === 'when' && subjCat !== 'time' && subjCat !== 'neutral_pronoun') {
+          return {
+            isValid: false,
+            reason: `Incomplete question "${words.join(' ')}" — "when" with a person or thing requires a complement (e.g. "When am I here?") or action verb`,
+          };
+        }
+        if (wh === 'why') {
+          return {
+            isValid: false,
+            reason: `Incomplete question "${words.join(' ')}" — "why" requires a complement (e.g. "Why am I here?")`,
+          };
+        }
         return {
           isValid: true,
           ruleName: `WH-Question ("${wh}")`,
           ruleExplanation: `Rule 4: WH-question "${words.join(' ')}" with copula "${aux}" and subject "${subjectTokens.join(' ')}".`,
         };
       }
+      if (
+        wh === 'how' &&
+        complementTokens[0] === 'doing' &&
+        canSubjectPerformDo(subjectTokens) &&
+        parseTrailingAdverbials(complementTokens.slice(1)).valid
+      ) {
+        return {
+          isValid: true,
+          ruleName: 'WH-Question ("How ... doing")',
+          ruleExplanation: `Rule 4: Idiomatic WH-question "${words.join(' ')}".`,
+        };
+      }
+      if (wh === 'how') {
+        return {
+          isValid: false,
+          reason: `"how" already asks about the state/manner of "${subjectTokens.join(' ')}" — cannot take additional complement "${complementTokens.join(' ')}"`,
+        };
+      }
+      if (wh === 'where' && complementTokens.some((t) => LOCATION_ADVERBS.has(t))) {
+        return {
+          isValid: false,
+          reason: `"where" already asks about location — cannot combine with location adverb "${complementTokens.join(' ')}"`,
+        };
+      }
       const copRes = validateCopulaComplement(complementTokens, subjectTokens, subjectNp.number);
       if (!copRes.isValid) return copRes;
+      if ((wh === 'where' || wh === 'when') && copRes.ruleName?.includes('Predicate Noun Phrase')) {
+        return {
+          isValid: false,
+          reason: `"${wh}" cannot take predicate noun phrase "${complementTokens.join(' ')}"`,
+        };
+      }
+      if (wh === 'where' && copRes.ruleName?.includes('Adjective')) {
+        return {
+          isValid: false,
+          reason: `"where" asks about location and cannot take adjective complement "${complementTokens.join(' ')}"`,
+        };
+      }
       return {
         isValid: true,
         ruleName: `WH-Question ("${wh}")`,
@@ -1755,15 +2713,59 @@ function validateWhQuestion(words: string[]): {
       const baseVerb = afterSubject[0];
       const subComp = afterSubject.slice(1);
       if (baseVerb === 'be') {
+        const subjTokens = afterAux.slice(0, subjectNp.length);
         if (subComp.length === 0) {
+          const subjCat = getSemanticCategory(subjTokens);
+          if (wh === 'when' && subjCat !== 'time' && subjCat !== 'neutral_pronoun') {
+            return {
+              isValid: false,
+              reason: `Incomplete question "${words.join(' ')}" — "when" requires a complement (e.g. "When will I be here?")`,
+            };
+          }
+          if (wh === 'why') {
+            return {
+              isValid: false,
+              reason: `Incomplete question "${words.join(' ')}" — "why" requires a complement (e.g. "Why will he be here?")`,
+            };
+          }
           return {
             isValid: true,
             ruleName: `WH-Question ("${wh}")`,
             ruleExplanation: `Rule 4: Modal WH-question "${words.join(' ')}".`,
           };
         }
-        const copRes = validateCopulaComplement(subComp, afterAux.slice(0, subjectNp.length), subjectNp.number, modalNegated);
+        if (subComp[0] === 'not') {
+          return {
+            isValid: false,
+            reason: `Negation "not" must precede "be" ("${wh} ${aux} ${subjTokens.join(' ')} not be ...")`,
+          };
+        }
+        if (wh === 'how') {
+          return {
+            isValid: false,
+            reason: `"how" already asks about manner/state — cannot take additional complement "${subComp.join(' ')}"`,
+          };
+        }
+        if (wh === 'where' && subComp.some((t) => LOCATION_ADVERBS.has(t))) {
+          return {
+            isValid: false,
+            reason: `"where" already asks about location — cannot combine with location adverb "${subComp.join(' ')}"`,
+          };
+        }
+        const copRes = validateCopulaComplement(subComp, subjTokens, subjectNp.number, modalNegated);
         if (!copRes.isValid) return copRes;
+        if ((wh === 'where' || wh === 'when') && copRes.ruleName?.includes('Predicate Noun Phrase')) {
+          return {
+            isValid: false,
+            reason: `"${wh}" cannot take predicate noun phrase "${subComp.join(' ')}"`,
+          };
+        }
+        if (wh === 'where' && copRes.ruleName?.includes('Adjective')) {
+          return {
+            isValid: false,
+            reason: `"where" asks about location and cannot take adjective complement "${subComp.join(' ')}"`,
+          };
+        }
         return {
           isValid: true,
           ruleName: `WH-Question ("${wh}")`,
@@ -1777,24 +2779,39 @@ function validateWhQuestion(words: string[]): {
         }
         const doObjCheck = validateDoObjectWithTrailing(subComp);
         if (!doObjCheck.isValid) return { isValid: false, reason: doObjCheck.reason };
+        const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+        const directObj = (doObjCheck.objTokens ?? subComp).join(' ');
         return {
           isValid: true,
-          ruleName: `WH-Question ("${wh}")`,
-          ruleExplanation: `Rule 4: Modal WH-question "${words.join(' ')}".`,
+          ruleName: `WH-Question ("${wh}")${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Modal WH-question "${wh} ${aux} ${subjTokens.join(' ')} ${modalNegated ? 'not ' : ''}do" + direct object "${directObj}"${trailTag.descPart}.`,
         };
       }
-      if (baseVerb === 'name' && !canSubjectPerformDo(afterAux.slice(0, subjectNp.length))) {
-        return { isValid: false, reason: `Semantic mismatch: "${afterAux.slice(0, subjectNp.length).join(' ')}" cannot perform verb "name"` };
+      const subjTokens = afterAux.slice(0, subjectNp.length);
+      if (baseVerb === 'name' && !canSubjectPerformDo(subjTokens)) {
+        return { isValid: false, reason: `Semantic mismatch: "${subjTokens.join(' ')}" cannot perform verb "name"` };
       }
-      const objRes = parseObjectWithTrailing(subComp);
-      if (objRes.valid) {
+      if (baseVerb === 'name') {
+        const nameRes = parseNameObjectWithTrailing(subComp);
+        if (!nameRes.valid) return { isValid: false, reason: nameRes.reason || `Invalid object after "name"` };
+        const trailTag = buildTrailingClauseTag(nameRes.trailingTokens);
+        const directObj = (nameRes.objTokens ?? subComp).join(' ');
         return {
           isValid: true,
-          ruleName: `WH-Question ("${wh}")`,
-          ruleExplanation: `Rule 4: Modal WH-question "${words.join(' ')}".`,
+          ruleName: `WH-Question ("${wh}")${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Modal WH-question "${wh} ${aux} ${subjTokens.join(' ')} ${modalNegated ? 'not ' : ''}name" + direct object "${directObj}"${trailTag.descPart}.`,
         };
       }
-      return { isValid: false, reason: objRes.reason || `Invalid object after "${baseVerb}"` };
+      const haveRes = validateHaveObjectWithTrailing(subjTokens, subComp);
+      if (haveRes.valid) {
+        const trailTag = buildTrailingClauseTag(haveRes.trailingTokens);
+        return {
+          isValid: true,
+          ruleName: `WH-Question ("${wh}")${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: Modal WH-question "${wh} ${aux} ${subjTokens.join(' ')} ${modalNegated ? 'not ' : ''}have" + direct object "${haveRes.objTokens.join(' ')}"${trailTag.descPart}.`,
+        };
+      }
+      return { isValid: false, reason: haveRes.reason || `Invalid object after "${baseVerb}"` };
     }
 
     if (aux === 'do' || aux === 'does' || aux === 'did') {
@@ -1807,7 +2824,8 @@ function validateWhQuestion(words: string[]): {
         return { isValid: false, reason: agreement.reason };
       }
       let afterSubject = afterAux.slice(subjectNp.length);
-      if (afterSubject[0] === 'not') afterSubject = afterSubject.slice(1);
+      const doNegated = afterSubject[0] === 'not';
+      if (doNegated) afterSubject = afterSubject.slice(1);
       if (afterSubject.length === 0 || !['have', 'do', 'name'].includes(afterSubject[0])) {
         return { isValid: false, reason: `Question with "${wh} ${aux}" requires base verb "have", "do", or "name"` };
       }
@@ -1815,31 +2833,45 @@ function validateWhQuestion(words: string[]): {
       if (subComp.length === 0) {
         return { isValid: false, reason: `Incomplete question: "${afterSubject[0]}" requires an object` };
       }
+      const subjTokens = afterAux.slice(0, subjectNp.length);
       if (afterSubject[0] === 'do') {
-        const subjTokens = afterAux.slice(0, subjectNp.length);
         if (!canSubjectPerformDo(subjTokens)) {
           return { isValid: false, reason: `Semantic mismatch: "${subjTokens.join(' ')}" cannot perform verb "do"` };
         }
         const doObjCheck = validateDoObjectWithTrailing(subComp);
         if (!doObjCheck.isValid) return { isValid: false, reason: doObjCheck.reason };
+        const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+        const directObj = (doObjCheck.objTokens ?? subComp).join(' ');
         return {
           isValid: true,
-          ruleName: `WH-Question ("${wh}")`,
-          ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
+          ruleName: `WH-Question ("${wh}")${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: WH-question "${wh} ${aux} ${subjTokens.join(' ')} ${doNegated ? 'not ' : ''}do" + direct object "${directObj}"${trailTag.descPart}.`,
         };
       }
-      if (afterSubject[0] === 'name' && !canSubjectPerformDo(afterAux.slice(0, subjectNp.length))) {
-        return { isValid: false, reason: `Semantic mismatch: "${afterAux.slice(0, subjectNp.length).join(' ')}" cannot perform verb "name"` };
+      if (afterSubject[0] === 'name' && !canSubjectPerformDo(subjTokens)) {
+        return { isValid: false, reason: `Semantic mismatch: "${subjTokens.join(' ')}" cannot perform verb "name"` };
       }
-      const objRes = parseObjectWithTrailing(subComp);
-      if (objRes.valid) {
+      if (afterSubject[0] === 'name') {
+        const nameRes = parseNameObjectWithTrailing(subComp);
+        if (!nameRes.valid) return { isValid: false, reason: nameRes.reason || `Invalid object after "name"` };
+        const trailTag = buildTrailingClauseTag(nameRes.trailingTokens);
+        const directObj = (nameRes.objTokens ?? subComp).join(' ');
         return {
           isValid: true,
-          ruleName: `WH-Question ("${wh}")`,
-          ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
+          ruleName: `WH-Question ("${wh}")${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: WH-question "${wh} ${aux} ${subjTokens.join(' ')} ${doNegated ? 'not ' : ''}name" + direct object "${directObj}"${trailTag.descPart}.`,
         };
       }
-      return { isValid: false, reason: objRes.reason || `Invalid object after "${afterSubject[0]}"` };
+      const haveRes = validateHaveObjectWithTrailing(subjTokens, subComp);
+      if (haveRes.valid) {
+        const trailTag = buildTrailingClauseTag(haveRes.trailingTokens);
+        return {
+          isValid: true,
+          ruleName: `WH-Question ("${wh}")${trailTag.ruleSuffix}`,
+          ruleExplanation: `Rule 4: WH-question "${wh} ${aux} ${subjTokens.join(' ')} ${doNegated ? 'not ' : ''}have" + direct object "${haveRes.objTokens.join(' ')}"${trailTag.descPart}.`,
+        };
+      }
+      return { isValid: false, reason: haveRes.reason || `Invalid object after "${afterSubject[0]}"` };
     }
 
     return {
@@ -1863,15 +2895,68 @@ function validateWhQuestion(words: string[]): {
         }
       }
       const subjectNp = parseNounPhrase(afterAux, 0, false);
-      if (subjectNp.valid && subjectNp.length === afterAux.length && checkSubjectVerbAgreement(subjectNp.number, aux).isValid) {
-        return {
-          isValid: true,
-          ruleName: `WH-Question ("${wh}")`,
-          ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
-        };
+      if (subjectNp.valid && checkSubjectVerbAgreement(subjectNp.number, aux).isValid) {
+        const subjTokens = afterAux.slice(0, subjectNp.length);
+        const tailAfterSubj = afterAux.slice(subjectNp.length);
+        if (tailAfterSubj.length === 0) {
+          const subjCat = getSemanticCategory(subjTokens);
+          if (wh === 'what' && subjCat === 'human' && !ARTICLES.has(subjTokens[0])) {
+            return {
+              isValid: false,
+              reason: `Use "Who" rather than "What" when asking about a person ("${subjTokens.join(' ')}")`,
+            };
+          }
+          if (wh === 'who' && (subjCat === 'object' || subjCat === 'time' || subjCat === 'name')) {
+            return {
+              isValid: false,
+              reason: `Use "What" rather than "Who" when asking about "${subjTokens.join(' ')}"`,
+            };
+          }
+          return {
+            isValid: true,
+            ruleName: `WH-Question ("${wh}")`,
+            ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
+          };
+        }
+        // Present/past continuous object WH-question: "What is he doing [here]?"
+        if (
+          wh === 'what' &&
+          tailAfterSubj[0] === 'doing' &&
+          canSubjectPerformDo(subjTokens) &&
+          parseTrailingAdverbials(tailAfterSubj.slice(1)).valid
+        ) {
+          return {
+            isValid: true,
+            ruleName: 'Continuous WH-Question ("What ... doing")',
+            ruleExplanation: `Rule 4: Continuous WH-question "${words.join(' ')}".`,
+          };
+        }
+        // Stranded preposition WH-questions: "Who is it for?", "What is this for?", "Who is she good to?"
+        const tailNoNot = tailAfterSubj[0] === 'not' ? tailAfterSubj.slice(1) : tailAfterSubj;
+        if (
+          tailNoNot.length === 1 &&
+          (tailNoNot[0] === 'for' || (tailNoNot[0] === 'to' && wh === 'who'))
+        ) {
+          return {
+            isValid: true,
+            ruleName: `Stranded Preposition WH-Question ("${wh} ... ${tailNoNot[0]}")`,
+            ruleExplanation: `Rule 4: British Council standard WH-question with final preposition "${words.join(' ')}".`,
+          };
+        }
+        if (
+          tailNoNot.length === 2 &&
+          EVALUATIVE_ADJECTIVES.has(tailNoNot[0]) &&
+          (tailNoNot[1] === 'for' || (tailNoNot[1] === 'to' && wh === 'who'))
+        ) {
+          return {
+            isValid: true,
+            ruleName: `Stranded Preposition WH-Question ("${wh} ... ${tailNoNot[0]} ${tailNoNot[1]}")`,
+            ruleExplanation: `Rule 4: Evaluative WH-question with final preposition "${words.join(' ')}".`,
+          };
+        }
       }
       // Or WH as subject: "Who is here?", "What is good?", "Who is my friend?"
-      const placeholder = wh === 'who' ? 'some body' : 'some thing';
+      const placeholder = wh === 'who' ? 'somebody' : 'something';
       const asSubj = validateDeclarativeSentence([placeholder, ...rest]);
       if (asSubj.isValid) {
         return {
@@ -1898,19 +2983,36 @@ function validateWhQuestion(words: string[]): {
               ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
             };
           }
-          if (afterSubj[0] === 'name' && parseObjectWithTrailing(restObj).valid) {
+          if (afterSubj[0] === 'name' && parseNameObjectWithTrailing(restObj).valid) {
             return {
               isValid: true,
               ruleName: `WH-Question ("${wh}" + Name Object)`,
               ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
             };
           }
+          // Stranded "for": "What did you do that for?", "Who did you do it for?"
+          if (restObj.length >= 2 && restObj[restObj.length - 1] === 'for') {
+            const innerObj = restObj.slice(0, -1);
+            const innerOk =
+              afterSubj[0] === 'do'
+                ? validateDoObjectWithTrailing(innerObj).isValid
+                : afterSubj[0] === 'name'
+                ? parseNameObjectWithTrailing(innerObj).valid
+                : parseObjectWithTrailing(innerObj).valid;
+            if (innerOk) {
+              return {
+                isValid: true,
+                ruleName: `Stranded Preposition WH-Question ("${wh} ... for")`,
+                ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
+              };
+            }
+          }
         }
       }
     }
 
     // Subject WH-question with transitive/modal verb: "Who has a friend?", "Who can be here?"
-    const placeholder = wh === 'who' ? 'some body' : 'some thing';
+    const placeholder = wh === 'who' ? 'somebody' : 'something';
     const asSubj = validateDeclarativeSentence([placeholder, ...rest]);
     if (asSubj.isValid) {
       return {
@@ -1922,6 +3024,352 @@ function validateWhQuestion(words: string[]): {
     return { isValid: false, reason: asSubj.reason || `Invalid question "${words.join(' ')}"` };
   }
 
+  // 3. Object-only WH-pronoun: whom (cannot be a subject — must have auxiliary + subject or stranded preposition)
+  if (wh === 'whom') {
+    if (['is', 'am', 'are', 'was', 'were'].includes(aux)) {
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
+      if (subjectNp.valid && checkSubjectVerbAgreement(subjectNp.number, aux).isValid) {
+        const subjTokens = afterAux.slice(0, subjectNp.length);
+        const tailAfterSubj = afterAux.slice(subjectNp.length);
+        const tailNoNot = tailAfterSubj[0] === 'not' ? tailAfterSubj.slice(1) : tailAfterSubj;
+        if (tailNoNot.length === 1 && (tailNoNot[0] === 'for' || tailNoNot[0] === 'to')) {
+          return {
+            isValid: true,
+            ruleName: `WH-Question ("whom ... ${tailNoNot[0]}")`,
+            ruleExplanation: `Rule 4: British Council WH-question with object pronoun "whom": "${words.join(' ')}".`,
+          };
+        }
+        if (
+          tailNoNot.length === 2 &&
+          EVALUATIVE_ADJECTIVES.has(tailNoNot[0]) &&
+          (tailNoNot[1] === 'for' || tailNoNot[1] === 'to')
+        ) {
+          return {
+            isValid: true,
+            ruleName: `WH-Question ("whom ... ${tailNoNot[0]} ${tailNoNot[1]}")`,
+            ruleExplanation: `Rule 4: Evaluative WH-question with "whom": "${words.join(' ')}".`,
+          };
+        }
+        if (
+          tailNoNot.length === 0 &&
+          ['it', 'this', 'that'].includes(subjTokens[0])
+        ) {
+          return {
+            isValid: false,
+            reason: `"whom" is an object pronoun and requires a preposition (e.g. "Whom is this for?") or transitive verb`,
+          };
+        }
+      }
+      return {
+        isValid: false,
+        reason: `"whom" is strictly an object pronoun — use "Who" as subject or pair "whom" with a transitive verb / preposition (e.g. "Whom did you name?", "Whom is it for?")`,
+      };
+    }
+
+    if (['do', 'does', 'did', 'can', 'will'].includes(aux)) {
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
+      if (!subjectNp.valid) {
+        return { isValid: false, reason: subjectNp.reason || `Invalid subject after "whom ${aux}"` };
+      }
+      const agreement = checkSubjectVerbAgreement(subjectNp.number, aux);
+      if (!agreement.isValid) {
+        return { isValid: false, reason: agreement.reason };
+      }
+      let afterSubj = afterAux.slice(subjectNp.length);
+      if (afterSubj[0] === 'not') afterSubj = afterSubj.slice(1);
+      if (afterSubj.length >= 1 && ['have', 'do', 'name'].includes(afterSubj[0])) {
+        const mainV = afterSubj[0];
+        const restObj = afterSubj.slice(1);
+        if (mainV === 'name') {
+          // "Whom did you name?", "Whom did you name here?", "Whom will she name her friend?"
+          // "whom" already fills the direct object of "name" — cannot take another object like "something" or "a thing"
+          if (restObj.length === 0 || parseTrailingAdverbials(restObj).valid) {
+            return {
+              isValid: true,
+              ruleName: 'WH-Question ("whom")',
+              ruleExplanation: `Rule 4: Object WH-question "${words.join(' ')}".`,
+            };
+          }
+          const roleNp = parseNounPhrase(restObj, 0, false);
+          if (roleNp.valid) {
+            const roleTokens = restObj.slice(0, roleNp.length);
+            const afterRole = restObj.slice(roleNp.length);
+            const isHumanRole =
+              roleTokens.length >= 2 &&
+              HUMAN_NOUNS.has(roleTokens[roleTokens.length - 1]);
+            const isProperRole =
+              roleTokens.length === 1 && isProperNameToken(roleTokens[0]);
+            if (
+              (isHumanRole || isProperRole) &&
+              (afterRole.length === 0 || parseTrailingAdverbials(afterRole).valid)
+            ) {
+              return {
+                isValid: true,
+                ruleName: 'WH-Question ("whom")',
+                ruleExplanation: `Rule 4: Ditransitive naming WH-question "${words.join(' ')}".`,
+              };
+            }
+          }
+        } else if (mainV === 'have') {
+          if (restObj.length === 0 || parseTrailingAdverbials(restObj).valid) {
+            return {
+              isValid: true,
+              ruleName: 'WH-Question ("whom")',
+              ruleExplanation: `Rule 4: Object WH-question "${words.join(' ')}".`,
+            };
+          }
+        }
+        // Stranded preposition: "Whom did you do it for?", "Whom did you do that to?"
+        if (restObj.length >= 2 && (restObj[restObj.length - 1] === 'for' || restObj[restObj.length - 1] === 'to')) {
+          const innerObj = restObj.slice(0, -1);
+          const innerOk =
+            mainV === 'do'
+              ? validateDoObjectWithTrailing(innerObj).isValid
+              : mainV === 'name'
+              ? parseNameObjectWithTrailing(innerObj).valid
+              : parseObjectWithTrailing(innerObj).valid;
+          if (innerOk) {
+            return {
+              isValid: true,
+              ruleName: `Stranded Preposition WH-Question ("whom ... ${restObj[restObj.length - 1]}")`,
+              ruleExplanation: `Rule 4: British Council WH-question with "whom": "${words.join(' ')}".`,
+            };
+          }
+        }
+      }
+      return {
+        isValid: false,
+        reason: `Invalid question with "whom" — try e.g. "Whom did you name?" or "Whom did you do it for?"`,
+      };
+    }
+
+    return {
+      isValid: false,
+      reason: `"whom" is strictly an object pronoun and must be followed by an auxiliary verb (did, do, does, will, can, is, was)`,
+    };
+  }
+
+  // 4. Possessive & Selective WH-words: whose, which
+  // Supports both determiner form ("Whose friend is here?", "Which thing did you do?")
+  // and standalone pronoun form ("Whose is this?", "Which is good?", "Which did you do?").
+  if (wh === 'whose' || wh === 'which') {
+    const repDet = wh === 'whose' ? 'his' : 'the';
+    const npCheck = parseNounPhrase([repDet, ...rest], 0, false);
+
+    // Determiner form: "Whose/Which + [Adj*] + Noun + ..."
+    // Must not accidentally treat bare "whose/which" followed directly by verb as a NounPhrase (npCheck.length >= 2 ensures a head noun was consumed).
+    if (npCheck.valid && npCheck.length >= 2 && !ARTICLES.has(rest[0]) && !POSSESSIVES.has(rest[0])) {
+      const nounLenInRest = npCheck.length - 1;
+      const whNounTokens = [repDet, ...rest.slice(0, nounLenInRest)];
+      const afterWhNoun = rest.slice(nounLenInRest);
+
+      if (afterWhNoun.length === 0) {
+        return { isValid: false, reason: `Incomplete question after "${wh} ${rest.join(' ')}"` };
+      }
+
+      const vAux = afterWhNoun[0];
+      const afterVAux = afterWhNoun.slice(1);
+
+      // Pattern 4a: Inverted Copula Question -> "Whose friend is he?", "Whose sister are you?", "Which thing is this?"
+      if (['is', 'am', 'are', 'was', 'were'].includes(vAux) && afterVAux.length >= 1) {
+        const subjNp = parseNounPhrase(afterVAux, 0, false);
+        if (subjNp.valid && checkSubjectVerbAgreement(subjNp.number, vAux).isValid) {
+          const tail = afterVAux.slice(subjNp.length);
+          const subjTokens = afterVAux.slice(0, subjNp.length);
+          if (tail.length === 0) {
+            // Singular "whose/which + Noun" cannot equate to plural subjects ("these", "those", "they", "we")
+            if (subjNp.number === 'plural') {
+              return {
+                isValid: false,
+                reason: `Number mismatch: Singular "${wh} ${whNounTokens.slice(1).join(' ')}" cannot be paired with plural "${subjTokens.join(' ')}"`,
+              };
+            }
+            return {
+              isValid: true,
+              ruleName: `WH-Question ("${wh} + Noun")`,
+              ruleExplanation: `Rule 4: Interrogative determiner WH-question "${words.join(' ')}".`,
+            };
+          }
+          if (
+            tail[0] === 'doing' &&
+            getSemanticCategory(whNounTokens) === 'object' &&
+            canSubjectPerformDo(subjTokens) &&
+            parseTrailingAdverbials(tail.slice(1)).valid
+          ) {
+            return {
+              isValid: true,
+              ruleName: `Continuous WH-Question ("${wh} ... doing")`,
+              ruleExplanation: `Rule 4: Continuous WH-question "${words.join(' ')}".`,
+            };
+          }
+          const tailNoNot = tail[0] === 'not' ? tail.slice(1) : tail;
+          if (tailNoNot.length === 1 && (tailNoNot[0] === 'for' || tailNoNot[0] === 'to')) {
+            return {
+              isValid: true,
+              ruleName: `Stranded Preposition WH-Question ("${wh} + Noun ... ${tailNoNot[0]}")`,
+              ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
+            };
+          }
+        }
+      }
+
+      // Pattern 4b: Auxiliary Object Question -> "Whose name did you have?", "Which thing did you do?"
+      if (['do', 'does', 'did', 'can', 'will'].includes(vAux)) {
+        const subjNp = parseNounPhrase(afterVAux, 0, false);
+        if (subjNp.valid && checkSubjectVerbAgreement(subjNp.number, vAux).isValid) {
+          let afterSubj = afterVAux.slice(subjNp.length);
+          if (afterSubj[0] === 'not') afterSubj = afterSubj.slice(1);
+          if (afterSubj.length >= 1 && ['have', 'do', 'name'].includes(afterSubj[0])) {
+            const mainV = afterSubj[0];
+            const restObj = afterSubj.slice(1);
+            if (mainV === 'do' && getSemanticCategory(whNounTokens) !== 'object') {
+              return {
+                isValid: false,
+                reason: `Verb "do" asks about a thing or activity, not "${wh} ${rest.slice(0, nounLenInRest).join(' ')}"`,
+              };
+            }
+            if (restObj.length === 0 || parseTrailingAdverbials(restObj).valid) {
+              return {
+                isValid: true,
+                ruleName: `WH-Question ("${wh} + Noun")`,
+                ruleExplanation: `Rule 4: Object WH-question "${words.join(' ')}".`,
+              };
+            }
+            if (mainV === 'name' && parseNameObjectWithTrailing(restObj).valid) {
+              return {
+                isValid: true,
+                ruleName: `WH-Question ("${wh} + Noun")`,
+                ruleExplanation: `Rule 4: Naming WH-question "${words.join(' ')}".`,
+              };
+            }
+            if (restObj.length >= 2 && (restObj[restObj.length - 1] === 'for' || restObj[restObj.length - 1] === 'to')) {
+              const innerObj = restObj.slice(0, -1);
+              const innerOk =
+                mainV === 'do'
+                  ? validateDoObjectWithTrailing(innerObj).isValid
+                  : mainV === 'name'
+                  ? parseNameObjectWithTrailing(innerObj).valid
+                  : parseObjectWithTrailing(innerObj).valid;
+              if (innerOk) {
+                return {
+                  isValid: true,
+                  ruleName: `Stranded Preposition WH-Question ("${wh} + Noun ... ${restObj[restObj.length - 1]}")`,
+                  ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
+                };
+              }
+            }
+          }
+        }
+      }
+
+      // Pattern 4c: Subject WH-Determiner Question -> "Whose friend is here?", "Which sister has a friend?"
+      const asSubjDet = validateDeclarativeSentence([repDet, ...rest]);
+      if (asSubjDet.isValid) {
+        return {
+          isValid: true,
+          ruleName: `WH-Question ("${wh} + Noun" Subject)`,
+          ruleExplanation: `Rule 4: Subject WH-question "${words.join(' ')}".`,
+        };
+      }
+      return { isValid: false, reason: asSubjDet.reason || `Invalid question "${words.join(' ')}"` };
+    }
+
+    // Standalone Pronoun Form: "Whose is this?", "Which is this?", "Which did you do?", "Whose are these?"
+    if (['is', 'am', 'are', 'was', 'were'].includes(aux)) {
+      if (afterAux.length === 1 && ['it', 'this', 'that', 'these', 'those'].includes(afterAux[0])) {
+        const num = ['these', 'those'].includes(afterAux[0]) ? 'plural' : 'singular';
+        if (checkSubjectVerbAgreement(num, aux).isValid) {
+          return {
+            isValid: true,
+            ruleName: `WH-Question ("${wh}")`,
+            ruleExplanation: `Rule 4: Pronoun WH-question "${words.join(' ')}".`,
+          };
+        }
+      }
+
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
+      if (subjectNp.valid && checkSubjectVerbAgreement(subjectNp.number, aux).isValid) {
+        const subjTokens = afterAux.slice(0, subjectNp.length);
+        const tailAfterSubj = afterAux.slice(subjectNp.length);
+        const subjCat = getSemanticCategory(subjTokens);
+
+        if (tailAfterSubj.length === 0) {
+          if (getIndefiniteBase(subjTokens)) {
+            return {
+              isValid: false,
+              reason: `Standalone "${wh}" cannot be paired with indefinite pronoun "${subjTokens.join(' ')}"`,
+            };
+          }
+          if (wh === 'whose' && subjCat === 'human') {
+            return {
+              isValid: false,
+              reason: `Standalone "Whose" asks who owns a thing (e.g. "Whose is this?"), not about "${subjTokens.join(' ')}" — use "Whose friend is..." or "Who is..."`,
+            };
+          }
+          if (wh === 'which' && subjCat === 'human') {
+            return {
+              isValid: false,
+              reason: `Standalone "Which" cannot ask about person "${subjTokens.join(' ')}" — use "Who ${aux} ${subjTokens.join(' ')}?" or "Which [noun] ${aux} ${subjTokens.join(' ')}?"`,
+            };
+          }
+          return {
+            isValid: true,
+            ruleName: `WH-Question ("${wh}")`,
+            ruleExplanation: `Rule 4: Pronoun WH-question "${words.join(' ')}".`,
+          };
+        }
+
+        const tailNoNot = tailAfterSubj[0] === 'not' ? tailAfterSubj.slice(1) : tailAfterSubj;
+        if (wh === 'which' && tailNoNot.length === 1 && (tailNoNot[0] === 'for' || tailNoNot[0] === 'to')) {
+          return {
+            isValid: true,
+            ruleName: `Stranded Preposition WH-Question ("which ... ${tailNoNot[0]}")`,
+            ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
+          };
+        }
+      }
+
+      return {
+        isValid: false,
+        reason:
+          wh === 'whose'
+            ? `Invalid "Whose" question — use "Whose is this?" or "Whose [noun] is..."`
+            : `Incomplete or invalid "Which" fragment — use e.g. "Which is this?" or "Which thing is good?"`,
+      };
+    }
+
+    if (wh === 'which' && ['do', 'does', 'did', 'can', 'will'].includes(aux)) {
+      const subjectNp = parseNounPhrase(afterAux, 0, false);
+      if (subjectNp.valid && checkSubjectVerbAgreement(subjectNp.number, aux).isValid) {
+        let afterSubj = afterAux.slice(subjectNp.length);
+        if (afterSubj[0] === 'not') afterSubj = afterSubj.slice(1);
+        if (afterSubj.length >= 1 && ['have', 'do', 'name'].includes(afterSubj[0])) {
+          const restObj = afterSubj.slice(1);
+          if (restObj.length === 0 || parseTrailingAdverbials(restObj).valid) {
+            return {
+              isValid: true,
+              ruleName: 'WH-Question ("which")',
+              ruleExplanation: `Rule 4: Object WH-question "${words.join(' ')}".`,
+            };
+          }
+        }
+      }
+      const asSubjModal = validateDeclarativeSentence(['something', ...rest]);
+      if (asSubjModal.isValid) {
+        return {
+          isValid: true,
+          ruleName: 'WH-Question ("which" Subject)',
+          ruleExplanation: `Rule 4: WH-question "${words.join(' ')}".`,
+        };
+      }
+    }
+
+    return {
+      isValid: false,
+      reason: `Invalid "${wh}" question structure "${words.join(' ')}"`,
+    };
+  }
+
   return { isValid: false, reason: 'Unrecognized WH-question structure' };
 }
 
@@ -1929,7 +3377,7 @@ function validateWhQuestion(words: string[]): {
  * Validates an Imperative Statement (Command starting with base verb or "Do not + base verb")
  * e.g. "Name a thing", "Be good", "Do some thing", "Have a good night", "Do not be bad"
  */
-function validateImperative(words: string[]): {
+function validateImperative(words: string[], isNegatedImperative: boolean = false): {
   isValid: boolean;
   reason?: string;
   ruleName?: string;
@@ -1937,11 +3385,13 @@ function validateImperative(words: string[]): {
 } {
   // Negative imperative: "Do not + be/have/do/name + ..."
   if (words.length >= 3 && words[0] === 'do' && words[1] === 'not') {
-    const inner = validateImperative(words.slice(2));
+    const inner = validateImperative(words.slice(2), true);
     if (inner.isValid) {
       return {
         isValid: true,
-        ruleName: 'Negative Imperative Command ("Do not")',
+        ruleName: inner.ruleName
+          ? `Negative Imperative Command ("Do not") — ${inner.ruleName}`
+          : 'Negative Imperative Command ("Do not")',
         ruleExplanation: `Rule 4: Negative imperative instruction "${words.join(' ')}".`,
       };
     }
@@ -1952,19 +3402,60 @@ function validateImperative(words: string[]): {
   const rest = words.slice(1);
 
   if (first === 'name' && rest.length >= 1) {
-    const objRes = parseObjectWithTrailing(rest);
+    const objRes = parseNameObjectWithTrailing(rest);
     if (objRes.valid) {
+      const trailTag = buildTrailingClauseTag(objRes.trailingTokens);
+      const directObjStr = (objRes.objTokens ?? rest).join(' ');
+      const nameCompStr = objRes.nameTokens?.length ? ` + object complement "${objRes.nameTokens.join(' ')}"` : '';
       return {
         isValid: true,
-        ruleName: 'Imperative Command ("Name")',
-        ruleExplanation: `Rule 4: Imperative sentence ordering to name an entity: "${words.join(' ')}".`,
+        ruleName: `Imperative Command ("Name")${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Imperative command with verb "name" + direct object "${directObjStr}"${nameCompStr}${trailTag.descPart}.`,
       };
     }
   }
 
   if (first === 'be' && rest.length >= 1) {
-    const copRes = validateCopulaComplement(rest);
+    if (rest[0] === 'not') {
+      return {
+        isValid: false,
+        reason: `Negative imperatives must use "Do not be ..." rather than "Be not ..."`,
+      };
+    }
+    if (rest.length === 1 && isProperNameToken(rest[0])) {
+      return {
+        isValid: false,
+        reason: `Imperative "Be" cannot take proper name "${rest[0]}" as complement`,
+      };
+    }
+    const copRes = validateCopulaComplement(rest, ['you'], 'you', isNegatedImperative);
     if (copRes.isValid) {
+      // Disallow ill-formed relational/demonstrative role NPs in commands (e.g. "*Be this brother", "*Be the sister", "*Be your mother")
+      if (copRes.ruleName?.includes('Predicate Noun Phrase')) {
+        const np = parseNounPhrase(rest, 0);
+        const npToks = np.valid ? rest.slice(0, np.length) : rest;
+        const firstDet = npToks[0];
+        if (!['a', 'my'].includes(firstDet)) {
+          return {
+            isValid: false,
+            reason: `Ill-formed imperative: "Be ${npToks.join(' ')}" cannot use determiner "${firstDet}" in a command (use e.g. "Be a friend" or "Be my friend")`,
+          };
+        }
+      }
+      // Disallow non-behavioral/stative adjectives ("big", "small", "young", "old") in all "Be + Adj" imperatives,
+      // and disallow negative bare adjective "bad" in positive imperatives (*Be bad; "Do not be bad" remains valid).
+      const hasAdj = rest.some((t) => ADJECTIVES.has(t));
+      if (
+        hasAdj &&
+        (rest.some((t) => ['big', 'small', 'young', 'old'].includes(t)) || (!isNegatedImperative && rest[0] === 'bad'))
+      ) {
+        return {
+          isValid: false,
+          reason: !isNegatedImperative && rest[0] === 'bad'
+            ? `Ill-formed positive imperative: "Be bad" is not a natural command (use "Be good" or "Do not be bad")`
+            : `Ill-formed imperative: "Be ${rest.join(' ')}" uses a non-controllable stative adjective`,
+        };
+      }
       return {
         isValid: true,
         ruleName: 'Imperative Command ("Be")',
@@ -1976,21 +3467,35 @@ function validateImperative(words: string[]): {
   if (first === 'do' && rest.length >= 1) {
     const doObjCheck = validateDoObjectWithTrailing(rest);
     if (doObjCheck.isValid) {
+      const trailTag = buildTrailingClauseTag(doObjCheck.trailingTokens);
+      const directObj = (doObjCheck.objTokens ?? rest).join(' ');
       return {
         isValid: true,
-        ruleName: 'Imperative Command ("Do")',
-        ruleExplanation: `Rule 4: Imperative action command: "${words.join(' ')}".`,
+        ruleName: `Imperative Command ("Do")${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Imperative action command with verb "do" + direct object "${directObj}"${trailTag.descPart}.`,
       };
     }
   }
 
   if (first === 'have' && rest.length >= 1) {
-    const objRes = parseObjectWithTrailing(rest);
+    const objRes = validateHaveObjectWithTrailing(['you'], rest);
     if (objRes.valid) {
+      // Disallow incomplete/unnatural bare imperatives with human objects + location or indefinite human pronoun (*Have somebody in there)
+      if (
+        getIndefiniteBase(objRes.objTokens) === 'some body' ||
+        (objRes.objTokens.length === 1 && HUMAN_OBJECT_PRONOUNS.has(objRes.objTokens[0])) ||
+        (getSemanticCategory(objRes.objTokens) === 'human' && objRes.trailingTokens.length > 0)
+      ) {
+        return {
+          isValid: false,
+          reason: `Ill-formed imperative: "Have ${rest.join(' ')}" is incomplete or unnatural as a direct command`,
+        };
+      }
+      const trailTag = buildTrailingClauseTag(objRes.trailingTokens);
       return {
         isValid: true,
-        ruleName: 'Imperative / Wish ("Have")',
-        ruleExplanation: `Rule 4: Imperative expression: "${words.join(' ')}".`,
+        ruleName: `Imperative / Wish ("Have")${trailTag.ruleSuffix}`,
+        ruleExplanation: `Rule 4: Imperative expression with verb "have" + direct object "${objRes.objTokens.join(' ')}"${trailTag.descPart}.`,
       };
     }
   }
@@ -2057,14 +3562,27 @@ function validateLocativeFronting(words: string[]): {
     }
   }
 
-  // Pattern B: "Here is Father", "There is a friend here", "There is not a thing"
+  // Pattern B: "Here is my father", "Here is John", "There is a friend here", "There is not a thing", "There are a brother and a sister"
+  // Note: British Council English does NOT invert personal pronouns here ("Here is it" / "There are they" -> use "Here it is" / "There they are").
+  // Also fronted "Here" already fills location, so trailing "here"/"there" cannot follow (*Here is John there).
   const secondToken = words[1];
   if (copulas.includes(secondToken)) {
     const subjTokens = words[2] === 'not' ? words.slice(3) : words.slice(2);
-    if (subjTokens.length > 0) {
-      const subjNp = parseNounPhrase(subjTokens, 0);
+    if (subjTokens.length > 0 && !isPersonalPronounToken(subjTokens[0])) {
+      const hasConflictingTrail = (trail: string[]): boolean => {
+        if (lead === 'here' && trail.some((t) => t === 'here' || t === 'there')) return true;
+        if (lead === 'there' && trail[0] === 'there') return true;
+        return false;
+      };
+      const subjNp = parseNounPhrase(subjTokens, 0, true);
       if (subjNp.valid) {
-        const trailingOk = parseTrailingAdverbials(subjTokens.slice(subjNp.length)).valid;
+        const exSubj = subjTokens.slice(0, subjNp.length);
+        const isBareDemInThere =
+          lead === 'there' &&
+          exSubj.length === 1 &&
+          (DEMONSTRATIVES_SINGULAR.has(exSubj[0]) || DEMONSTRATIVES_PLURAL.has(exSubj[0]));
+        const trail = subjTokens.slice(subjNp.length);
+        const trailingOk = !isBareDemInThere && !hasConflictingTrail(trail) && parseTrailingAdverbials(trail).valid;
         if (trailingOk) {
           const agreement = checkSubjectVerbAgreement(subjNp.number, secondToken);
           if (!agreement.isValid) {
@@ -2077,6 +3595,29 @@ function validateLocativeFronting(words: string[]): {
           };
         }
       }
+      // Compound plural subject in Pattern B: "There are a brother and a sister here"
+      for (let andIdx = 1; andIdx < subjTokens.length - 1; andIdx++) {
+        if (subjTokens[andIdx] === 'and') {
+          const leftToks = subjTokens.slice(0, andIdx);
+          const leftNp = parseNounPhrase(leftToks, 0, false);
+          if (leftNp.valid && leftNp.length === leftToks.length) {
+            const afterAnd = subjTokens.slice(andIdx + 1);
+            const rightNp = parseNounPhrase(afterAnd, 0, true);
+            const trail = rightNp.valid ? afterAnd.slice(rightNp.length) : [];
+            if (rightNp.valid && !hasConflictingTrail(trail) && parseTrailingAdverbials(trail).valid) {
+              const agreement = checkSubjectVerbAgreement('plural', secondToken);
+              if (!agreement.isValid) {
+                return { isValid: false, reason: agreement.reason };
+              }
+              return {
+                isValid: true,
+                ruleName: 'Existential / Presentational ("Here/There" + Copula + Compound Subject)',
+                ruleExplanation: `Rule 4: Locative inversion with compound subject "${words.join(' ')}".`,
+              };
+            }
+          }
+        }
+      }
     }
   }
 
@@ -2087,7 +3628,11 @@ function validateLocativeFronting(words: string[]): {
     if (rest[0] === 'be' && rest.length >= 2) {
       const subjTokens = rest.slice(1);
       const subjNp = parseNounPhrase(subjTokens, 0);
-      if (subjNp.valid && parseTrailingAdverbials(subjTokens.slice(subjNp.length)).valid) {
+      const exSubj = subjNp.valid ? subjTokens.slice(0, subjNp.length) : [];
+      const isBareDem =
+        exSubj.length === 1 &&
+        (DEMONSTRATIVES_SINGULAR.has(exSubj[0]) || DEMONSTRATIVES_PLURAL.has(exSubj[0]));
+      if (subjNp.valid && !isBareDem && parseTrailingAdverbials(subjTokens.slice(subjNp.length)).valid) {
         return {
           isValid: true,
           ruleName: `Existential Modal ("There ${secondToken} be")`,
@@ -2129,13 +3674,42 @@ export function validateSentenceClause(tokens: string[]): {
       const leftVal = validateSentenceClause(leftPart);
       const rightVal = validateSentenceClause(rightPart);
       if (leftVal.isValid && rightVal.isValid) {
-        return {
-          isValid: true,
-          ruleName: 'Compound Sentence (Conjunction)',
-          ruleExplanation: `Rule 4: Two independent clauses connected by conjunction "${words[i]}".`,
+        const getClauseMood = (ruleName?: string): 'question' | 'imperative' | 'declarative' => {
+          if (!ruleName) return 'declarative';
+          if (isQuestionRuleName(ruleName)) return 'question';
+          if (ruleName.includes('Imperative')) return 'imperative';
+          return 'declarative';
         };
-      }
-      if (!firstClauseError) {
+        const leftMood = getClauseMood(leftVal.ruleName);
+        const rightMood = getClauseMood(rightVal.ruleName);
+        if (leftMood === rightMood) {
+          const stripPrefix = (rn?: string): string | undefined =>
+            rn?.replace(/^Compound (?:Sentence|Question|Imperative) \(Conjunction\):\s*/, '');
+          const combinedTags = collectUniqueRuleTags(
+            stripPrefix(leftVal.ruleName),
+            stripPrefix(rightVal.ruleName)
+          );
+          const moodPrefix =
+            leftMood === 'question'
+              ? 'Compound Question (Conjunction)'
+              : leftMood === 'imperative'
+              ? 'Compound Imperative (Conjunction)'
+              : 'Compound Sentence (Conjunction)';
+          const combinedDetails = [leftVal.ruleExplanation, rightVal.ruleExplanation]
+            .filter(Boolean)
+            .join(' ');
+          return {
+            isValid: true,
+            ruleName: combinedTags.length > 0 ? `${moodPrefix}: ${combinedTags.join(' + ')}` : moodPrefix,
+            ruleExplanation: `Rule 4: Two independent clauses connected by conjunction "${words[i]}".${
+              combinedDetails ? ` ${combinedDetails}` : ''
+            }`,
+          };
+        }
+        if (!firstClauseError) {
+          firstClauseError = `Cannot join a ${leftMood} and a ${rightMood} with "${words[i]}"`;
+        }
+      } else if (!firstClauseError) {
         firstClauseError = !leftVal.isValid
           ? `Left clause error: ${leftVal.reason}`
           : `Right clause error: ${rightVal.reason}`;
@@ -2171,10 +3745,16 @@ export function validateSentenceClause(tokens: string[]): {
             words.slice(verbAfterIdx + 1)
           );
           if (predRes.isValid) {
+            const predTags = collectUniqueRuleTags(predRes.ruleName);
             return {
               isValid: true,
-              ruleName: 'Compound Subject + Plural Agreement',
-              ruleExplanation: `Rule 4: Compound subject "${leftNpTokens.join(' ')} and ${rightNpTokens.join(' ')}" takes plural agreement.`,
+              ruleName:
+                predTags.length > 0
+                  ? `Compound Subject + Plural Agreement: ${predTags.join(' + ')}`
+                  : 'Compound Subject + Plural Agreement',
+              ruleExplanation: `Rule 4: Compound subject "${leftNpTokens.join(' ')} and ${rightNpTokens.join(' ')}" takes plural agreement.${
+                predRes.ruleExplanation ? ` ${predRes.ruleExplanation}` : ''
+              }`,
             };
           }
           // Preserve specific verb agreement error (e.g. "Father and mother is here")
@@ -2201,10 +3781,19 @@ export function validateSentenceClause(tokens: string[]): {
           const leftSent = validateDeclarativeSentence(words.slice(0, i));
           const rightSent = validateDeclarativeSentence([...subjTokens, ...words.slice(i + 1)]);
           if (leftSent.isValid && rightSent.isValid) {
+            const predTags = collectUniqueRuleTags(leftSent.ruleName, rightSent.ruleName);
+            const predDetails = [leftSent.ruleExplanation, rightSent.ruleExplanation]
+              .filter(Boolean)
+              .join(' ');
             return {
               isValid: true,
-              ruleName: 'Compound Predicate (Shared Subject)',
-              ruleExplanation: `Rule 4: Shared subject "${subjTokens.join(' ')}" with coordinated predicates joined by "${words[i]}".`,
+              ruleName:
+                predTags.length > 0
+                  ? `Compound Predicate (Shared Subject): ${predTags.join(' + ')}`
+                  : 'Compound Predicate (Shared Subject)',
+              ruleExplanation: `Rule 4: Shared subject "${subjTokens.join(' ')}" with coordinated predicates joined by "${words[i]}".${
+                predDetails ? ` ${predDetails}` : ''
+              }`,
             };
           }
         }
@@ -2224,17 +3813,29 @@ export function validateSentenceClause(tokens: string[]): {
     if (impCheck.isValid) {
       return impCheck;
     }
+    // If no declarative reading applies either (e.g. starts with "be" or an ill-formed "have" imperative), preserve specific imperative error
+    if (words[0] === 'be' || (words[0] === 'have' && impCheck.reason?.includes('Ill-formed imperative'))) {
+      firstClauseError = impCheck.reason;
+    }
   }
 
-  // 4. Check for WH-Question (e.g. "Where am I?", "Where is he?", "What is that?", "Who are you?", "How old is he?")
-  if (WH_QUESTION_WORDS.has(words[0])) {
+  // 4. Check for WH-Question (e.g. "Where am I?", "Whom did you name?", "Whose friend is here?", "Which is this?", "To whom is this?")
+  // or Nominal WH-Clause (e.g. "Who he is", "What it is", "How old he is")
+  if (WH_QUESTION_WORDS.has(words[0]) || ((words[0] === 'to' || words[0] === 'for') && words[1] === 'whom')) {
     const whCheck = validateWhQuestion(words);
     if (whCheck.isValid) {
       return whCheck;
     }
+    const nominalCheck = validateNominalWhClause(words);
+    if (nominalCheck.isValid) {
+      return nominalCheck;
+    }
     return {
       isValid: false,
-      reason: whCheck.reason || 'Incorrect WH-question structure',
+      reason:
+        (nominalCheck.attemptedSubjectFirst && nominalCheck.reason) ||
+        whCheck.reason ||
+        'Incorrect WH-question or nominal WH-clause structure',
     };
   }
 
@@ -2244,10 +3845,10 @@ export function validateSentenceClause(tokens: string[]): {
     if (questionCheck.isValid) {
       return questionCheck;
     }
-    // Return the specific question error reason so the player knows why it was rejected
+    // Return the specific question error reason (or ill-formed imperative reason) so the player knows why it was rejected
     return {
       isValid: false,
-      reason: questionCheck.reason || 'Incorrect question structure or missing complement',
+      reason: firstClauseError || questionCheck.reason || 'Incorrect question structure or missing complement',
     };
   }
 
@@ -2280,6 +3881,7 @@ export function validateSentenceClause(tokens: string[]): {
  * Validates a full sequence of tiles that may contain full stops '.' (Rule 8)
  */
 export function validateFullSequence(tiles: TileData[]): GrammarResult & {
+  formattedText?: string;
   ruleName?: string;
   ruleExplanation?: string;
 } {
@@ -2311,13 +3913,13 @@ export function validateFullSequence(tiles: TileData[]): GrammarResult & {
   }
 
   // Split sequence by full stop '.' (Rule 8: "The full stop '.' allows new sentence to start or old one to finish.")
-  const clauses: string[][] = [];
+  const clauses: { tokens: string[]; hasTrailingDot: boolean }[] = [];
   let currentClause: string[] = [];
 
   for (const t of tiles) {
     if (t.word === '.') {
       if (currentClause.length > 0) {
-        clauses.push(currentClause);
+        clauses.push({ tokens: currentClause, hasTrailingDot: true });
         currentClause = [];
       }
     } else {
@@ -2326,7 +3928,7 @@ export function validateFullSequence(tiles: TileData[]): GrammarResult & {
     }
   }
   if (currentClause.length > 0) {
-    clauses.push(currentClause);
+    clauses.push({ tokens: currentClause, hasTrailingDot: false });
   }
 
   if (clauses.length === 0) {
@@ -2335,10 +3937,11 @@ export function validateFullSequence(tiles: TileData[]): GrammarResult & {
 
   const clauseRules: string[] = [];
   const clauseExplanations: string[] = [];
+  const formattedClauses: string[] = [];
 
   // Every clause must be grammatically valid and complete
   for (let i = 0; i < clauses.length; i++) {
-    const clauseTokens = clauses[i];
+    const { tokens: clauseTokens, hasTrailingDot } = clauses[i];
     const res = validateSentenceClause(clauseTokens);
     if (!res.isValid) {
       const sentenceText = clauseTokens.join(' ');
@@ -2348,6 +3951,23 @@ export function validateFullSequence(tiles: TileData[]): GrammarResult & {
         reason: `Clause "${sentenceText}": ${res.reason || 'Not a valid grammar structure'}`,
       };
     }
+    const isQuestion = isQuestionRuleName(res.ruleName);
+    if (isQuestion && hasTrailingDot) {
+      const sentenceText = clauseTokens.join(' ');
+      return {
+        isValid: false,
+        score: 0,
+        reason: `Punctuation error: Question "${sentenceText}" cannot end with "." — inverted yes/no and WH-questions must end with "?"`,
+      };
+    }
+    const joinedClause = clauseTokens.join(' ');
+    if (isQuestion) {
+      formattedClauses.push(joinedClause.endsWith('?') ? joinedClause : `${joinedClause}?`);
+    } else if (hasTrailingDot) {
+      formattedClauses.push(`${joinedClause} .`);
+    } else {
+      formattedClauses.push(joinedClause);
+    }
     if (res.ruleName) clauseRules.push(res.ruleName);
     if (res.ruleExplanation) clauseExplanations.push(res.ruleExplanation);
   }
@@ -2355,6 +3975,7 @@ export function validateFullSequence(tiles: TileData[]): GrammarResult & {
   return {
     isValid: true,
     score: totalScore,
+    formattedText: formattedClauses.join(' '),
     breakdown: `Valid sentence with ${totalScore} characters.`,
     ruleName: clauseRules.join('; ') || 'Subject-Verb-Complement Construction',
     ruleExplanation: clauseExplanations.join(' ') || `Rule 4 & 11: Valid grammatical sentence sequence worth ${totalScore} points.`,

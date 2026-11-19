@@ -130,7 +130,7 @@ export function generateGameDescriptionPdf(): jsPDF {
 
   const components = [
     { name: '15 x 15 Playing Grid', desc: 'Symmetrical 225-cell board with central starting star cell at Row 8, Col H (7,7).' },
-    { name: '100 Word & Punctuation Tiles', desc: 'Precision word cards across 8 grammatical categories, with letter point values.' },
+    { name: '109 Word & Punctuation Tiles', desc: 'Precision word cards across 9 grammatical categories (including 9 WH-question tools), with letter point values.' },
     { name: '10-Tile Player Racks', desc: 'Hand racks holding exactly 10 word tiles per active player at all times.' },
     { name: 'The Tile Bank (Bag)', desc: 'Draw pouch containing all remaining facedown word tiles for refills and exchanges.' },
     { name: 'Wildcard Names (N3, N4, N5, N6)', desc: 'Special wildcard tiles representing custom proper names of exactly 3, 4, 5, or 6 letters.' },
@@ -166,7 +166,7 @@ export function generateGameDescriptionPdf(): jsPDF {
     {
       num: 'Rule 1',
       title: 'Tile Bank Preparation',
-      text: 'Make all 100 word tiles face down randomly; this constitutes the Bank. Tiles must be thoroughly mixed before play begins.',
+      text: 'Make all 109 word tiles face down randomly; this constitutes the Bank. Tiles must be thoroughly mixed before play begins.',
     },
     {
       num: 'Rule 2',
@@ -196,7 +196,7 @@ export function generateGameDescriptionPdf(): jsPDF {
     {
       num: 'Rule 7',
       title: 'Grammar Referee & Dispute Resolution',
-      text: 'Refer to an authenticated English grammar book (or the in-game Grammar Referee) in case of dispute. Any grammatically unaccepted formation must be returned to hand.',
+      text: 'Refer to an authenticated English grammar reference — specifically British Council LearnEnglish Grammar — or the in-game Grammar Referee in case of dispute. Any grammatically unaccepted formation must be returned to hand.',
     },
     {
       num: 'Rule 8',
@@ -370,15 +370,16 @@ export function generateGameDescriptionPdf(): jsPDF {
 
   // Section 5: Complete Tile Distribution Breakdown
   checkPageBreak(40);
-  addSectionHeader('5. COMPLETE 100-TILE INVENTORY & POINT VALUES', '8 Grammatical Categories');
+  addSectionHeader('5. COMPLETE 109-TILE INVENTORY & POINT VALUES', '9 Grammatical Categories');
 
   // Category summary cards
   const categories = [
     { cat: 'Verbs (Action & Auxiliary)', count: 30, color: [22, 101, 52], desc: 'Is(10), Were(3), Was(3), Are(3), Am(1), Does(1), Doing(1), Did(1), Do(1), Had(1), Has(1), Have(1), Can(1), Will(1), Be(1)' },
-    { cat: 'Nouns (Substantives & Family)', count: 19, color: [30, 64, 175], desc: 'Some body(3), Name(3), Some thing(3), Thing(3), Friend(1), Sister(1), Brother(1), Father(1), Mother(1), Morning(1), Night(1)' },
+    { cat: 'Nouns (Substantives & Family)', count: 19, color: [30, 64, 175], desc: 'Somebody(3), Name(3), Something(3), Thing(3), Friend(1), Sister(1), Brother(1), Father(1), Mother(1), Morning(1), Night(1)' },
     { cat: 'Pronouns (Subject & Object)', count: 14, color: [107, 33, 168], desc: 'You(1), He(1), She(1), It(1), We(1), I(1), Me(1), They(1), Him(1), These(1), That(1), Them(1), This(1), Those(1)' },
     { cat: 'Determiners & Conjunctions', count: 13, color: [180, 83, 9], desc: 'A(3), The(3), And(1), But(1), My(1), His(1), Their(1), Your(1), Her(1)' },
     { cat: 'Adverbs & Prepositions', count: 11, color: [14, 116, 144], desc: 'Not(3), In(1), To(1), For(1), Down(1), Up(1), Out(1), There(1), Here(1)' },
+    { cat: 'WH-Question Tools', count: 9, color: [225, 29, 72], desc: 'Where(1), When(1), Who(1), Whom(1), Whose(1), Which(1), What(1), Why(1), How(1) - Form valid British English WH-questions' },
     { cat: 'Adjectives (Descriptive)', count: 6, color: [190, 24, 93], desc: 'Good(1), Bad(1), Small(1), Young(1), Old(1), Big(1)' },
     { cat: 'Wildcard Names (N3 - N6)', count: 4, color: [194, 65, 12], desc: 'N3(1)[3 letters], N4(1)[4 letters], N5(1)[5 letters], N6(1)[6 letters] - Choose any custom proper noun' },
     { cat: 'Punctuation Tiles', count: 3, color: [71, 85, 105], desc: 'Full Stop "." (3 tiles) - Ends current sentence & initiates new sentence on same line (0 pts)' },

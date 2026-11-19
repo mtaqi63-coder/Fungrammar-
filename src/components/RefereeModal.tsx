@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Sparkles, BookOpen, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { validateFullSequence } from '../utils/grammarValidator';
 
@@ -25,6 +25,15 @@ export const RefereeModal: React.FC<RefereeModalProps> = ({
     grammaticalBreakdown?: string;
     source?: string;
   } | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (pendingSentence) {
+        setInputText(pendingSentence);
+      }
+      setAnalysisResult(null);
+    }
+  }, [isOpen, pendingSentence]);
 
   if (!isOpen) return null;
   const isAr = language === 'ar';
@@ -89,8 +98,8 @@ export const RefereeModal: React.FC<RefereeModalProps> = ({
               </h3>
               <p className="text-xs text-slate-400">
                 {isAr
-                  ? 'الرجوع لكتب القواعد المعتبرة للتحقق من صحة الجملة ونقاطها'
-                  : 'Refer to authenticated grammar rules in case of dispute'}
+                  ? 'الرجوع لقواعد المجلس الثقافي البريطاني المعتمدة (British Council LearnEnglish) للتحقق من صحة الجملة ونقاطها'
+                  : 'Refer to authenticated British Council LearnEnglish grammar rules in case of dispute'}
               </p>
             </div>
           </div>

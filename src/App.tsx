@@ -1,9 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { BoardCell, GameMode, PlacedTile, Player, TileData } from './types/game';
-import { createNewTileBank, shuffleTiles, TILE_DEFINITIONS } from './data/tiles';
+import { createNewTileBank, shuffleTiles, TOTAL_BANK_TILES } from './data/tiles';
 import { AUTHENTIC_2005_BOARD_PLACEMENTS } from './data/sampleBoard';
-import { createEmptyBoard, validateMove, validatePlacementDirection, BOARD_SIZE } from './utils/boardLogic';
+import {
+  createEmptyBoard,
+  validateMove,
+  validatePlacementDirection,
+  ensureBoardMargin,
+  EDGE_MARGIN_TILES,
+} from './utils/boardLogic';
+import { copyBoardSnapshot } from './utils/boardSnapshot';
+import { downloadSentenceGrammarHistoryPdf } from './utils/generateSentenceHistoryPdf';
 import { sound } from './utils/audio';
 import { findBestBotMove } from './utils/aiBot';
 import { Header } from './components/Header';
@@ -19,9 +27,10 @@ import { DemonstrationModal } from './components/DemonstrationModal';
 import { GameManualPdfModal } from './components/GameManualPdfModal';
 import { MediaKitModal } from './components/MediaKitModal';
 import { StoryAndGuideModal } from './components/StoryAndGuideModal';
+import { GrammarValidationRulesModal } from './components/GrammarValidationRulesModal';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { PlayedSentencesLog } from './components/PlayedSentencesLog';
-import { Trophy, RefreshCw, Mail, Clock, Download, ArrowRightLeft, PlayCircle, Globe, Image as ImageIcon, ScrollText, Sparkles } from 'lucide-react';
+import { Trophy, RefreshCw, Clock, ArrowRightLeft, Sparkles, Copy, Check } from 'lucide-react';
 import { useWorldwideVisits } from './utils/visitorCounter';
 
 export default function App() {
@@ -63,10 +72,16 @@ export default function App() {
   const [isManualPdfOpen, setIsManualPdfOpen] = useState(false);
   const [isMediaKitOpen, setIsMediaKitOpen] = useState(false);
   const [isStoryOpen, setIsStoryOpen] = useState(false);
+  const [isGrammarRulesOpen, setIsGrammarRulesOpen] = useState(false);
   const [wildcardTile, setWildcardTile] = useState<TileData | null>(null);
 
   // Board Expansion (Grid expands up to 20x20)
   const [isAutoExpandMode, setIsAutoExpandMode] = useState(true);
+  const [boardCopied, setBoardCopied] = useState(false);
+  const boardCopiedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [disputeFeedback, setDisputeFeedback] = useState(false);
+  const disputeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [disputedRejectedKeys, setDisputedRejectedKeys] = useState<string[]>([]);
 
   // 1-Minute Player Turn Timer & Race-condition Guard
   const [turnTimeLeft, setTurnTimeLeft] = useState(60);
@@ -93,6 +108,20 @@ export default function App() {
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [lastTurnSentence, setLastTurnSentence] = useState<string | null>(null);
+  const [aiHighlightMove, setAiHighlightMove] = useState<{
+    moveId: number;
+    sentenceCoords: { row: number; col: number }[];
+    placedCoords: { row: number; col: number }[];
+    sentenceText: string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!aiHighlightMove) return;
+    const timer = setTimeout(() => {
+      setAiHighlightMove(null);
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [aiHighlightMove]);
 
   // Toggle sound
   const handleToggleSound = () => {
@@ -273,6 +302,7 @@ export default function App() {
       setIsAiThinking(false);
       setIsGameOver(false);
       setLastTurnSentence(null);
+      setAiHighlightMove(null);
       setTurnTimeLeft(60);
       setTimeAlert(null);
       if (exchangeAlertTimerRef.current) {
@@ -280,6 +310,12 @@ export default function App() {
         exchangeAlertTimerRef.current = null;
       }
       setExchangeAlert(null);
+      setDisputedRejectedKeys([]);
+      setDisputeFeedback(false);
+      if (disputeTimerRef.current) {
+        clearTimeout(disputeTimerRef.current);
+        disputeTimerRef.current = null;
+      }
 
       if (animateDeal) {
         sound.playShuffle();
@@ -327,9 +363,17 @@ export default function App() {
     }
 
     sound.playTilePlace();
+    setAiHighlightMove(null);
 
-    // Add to temp placements
-    setTempPlacements((prev) => [...prev, { row, col, tile: selectedRackTile }]);
+    // Add to temp placements & auto-expand board edges to preserve >= 3 empty tiles on every side
+    const nextTemp = [...tempPlacements, { row, col, tile: selectedRackTile }];
+    const expanded = ensureBoardMargin(board, nextTemp, EDGE_MARGIN_TILES);
+    if (expanded.shifted) {
+      setBoard(expanded.board);
+      setTempPlacements(expanded.tempPlacements);
+    } else {
+      setTempPlacements(nextTemp);
+    }
 
     // Remove from active player's rack
     setPlayers((prev) =>
@@ -546,7 +590,7 @@ export default function App() {
 
     sound.playValidSentence();
 
-    // Commit temp tiles to board permanently
+    // Commit temp tiles to board permanently & ensure >= 3 empty cells on every side
     const nextBoard = board.map((row) => row.map((cell) => ({ ...cell })));
     for (const p of tempPlacements) {
       nextBoard[p.row][p.col] = {
@@ -556,7 +600,8 @@ export default function App() {
         playerId: activePlayer.id,
       };
     }
-    setBoard(nextBoard);
+    const expandedBoard = ensureBoardMargin(nextBoard, [], EDGE_MARGIN_TILES);
+    setBoard(expandedBoard.board);
 
     // Refill player's rack from bank (Rule 5: "Substitute played words")
     const wordsNeeded = 10 - activePlayer.rack.length;
@@ -569,10 +614,18 @@ export default function App() {
     const sentenceSummary = currentValidation.sentences.map((s) => s.text).join(' & ');
     setLastTurnSentence(sentenceSummary);
 
+    const totalRecordedPlays = players.reduce(
+      (sum, pl) => sum + pl.sentencesFormed.length,
+      0
+    );
+    const acceptedCount = activePlayer.sentencesFormed.filter(
+      (s) => s.disputeType !== 'rejected_player_move'
+    ).length;
     const newFormedRecords = currentValidation.sentences.map((s, sIdx) => ({
       text: s.text,
       score: s.charCount,
-      turn: activePlayer.sentencesFormed.length + sIdx + 1,
+      turn: acceptedCount + sIdx + 1,
+      playOrder: totalRecordedPlays + sIdx + 1,
       ruleName: s.ruleName,
       ruleExplanation: s.ruleExplanation,
       direction: s.direction,
@@ -772,7 +825,7 @@ export default function App() {
         if (botMove) {
           sound.playValidSentence();
 
-          // Apply bot move
+          // Apply bot move & ensure >= 3 empty cells on every side
           const nextBoard = board.map((row) => row.map((cell) => ({ ...cell })));
           for (const p of botMove.placedTiles) {
             nextBoard[p.row][p.col] = {
@@ -782,7 +835,33 @@ export default function App() {
               playerId: current.id,
             };
           }
-          setBoard(nextBoard);
+          const expandedBoard = ensureBoardMargin(nextBoard, botMove.placedTiles, EDGE_MARGIN_TILES);
+          setBoard(expandedBoard.board);
+
+          // Highlight & focus the full computer-formed sentence(s) on the expanded board
+          const seenCoords = new Set<string>();
+          const sentenceCoords: { row: number; col: number }[] = [];
+          for (const s of botMove.sentences) {
+            for (const t of s.tiles) {
+              const row = t.row + expandedBoard.padTop;
+              const col = t.col + expandedBoard.padLeft;
+              const key = `${row},${col}`;
+              if (!seenCoords.has(key)) {
+                seenCoords.add(key);
+                sentenceCoords.push({ row, col });
+              }
+            }
+          }
+          const placedCoords = expandedBoard.tempPlacements.map((p) => ({
+            row: p.row,
+            col: p.col,
+          }));
+          setAiHighlightMove({
+            moveId: Date.now(),
+            sentenceCoords,
+            placedCoords,
+            sentenceText: botMove.sentenceText,
+          });
 
           // Remove played tiles from bot rack
           const placedIds = new Set(botMove.placedTiles.map((p) => p.tile.id));
@@ -796,10 +875,15 @@ export default function App() {
 
           setLastTurnSentence(botMove.sentenceText);
 
+          const totalRecordedPlays = players.reduce(
+            (sum, pl) => sum + pl.sentencesFormed.length,
+            0
+          );
           const botFormedRecords = botMove.sentences.map((s, sIdx) => ({
             text: s.text,
             score: s.charCount,
             turn: current.sentencesFormed.length + sIdx + 1,
+            playOrder: totalRecordedPlays + sIdx + 1,
             ruleName: s.ruleName,
             ruleExplanation: s.ruleExplanation,
             direction: s.direction,
@@ -855,7 +939,7 @@ export default function App() {
     let tileSeq = 9000;
 
     for (const item of AUTHENTIC_2005_BOARD_PLACEMENTS) {
-      if (item.row < BOARD_SIZE && item.col < BOARD_SIZE) {
+      if (item.row < loadedBoard.length && item.col < (loadedBoard[0]?.length ?? 0)) {
         const charLen = item.customName ? item.customName.length : item.word.replace(/\s+/g, '').length;
         const tile: TileData = {
           id: `sample_${tileSeq++}`,
@@ -867,6 +951,7 @@ export default function App() {
           customName: item.customName,
         };
         loadedBoard[item.row][item.col] = {
+          ...loadedBoard[item.row][item.col],
           row: item.row,
           col: item.col,
           tile,
@@ -874,7 +959,8 @@ export default function App() {
       }
     }
 
-    setBoard(loadedBoard);
+    const expanded = ensureBoardMargin(loadedBoard, [], EDGE_MARGIN_TILES);
+    setBoard(expanded.board);
     setTempPlacements([]);
     sound.playWin();
   };
@@ -909,15 +995,202 @@ export default function App() {
     ? bank.length + Math.max(0, pendingDealTotal - (players[0]?.rack.length ?? 0))
     : bank.length;
 
+  const handleCopyBoard = async () => {
+    sound.playTilePick();
+    const res = await copyBoardSnapshot({
+      board,
+      tempPlacements,
+      players,
+      bankCount: displayedBankCount,
+      totalBankTiles: TOTAL_BANK_TILES,
+      isAutoExpandMode,
+      language,
+    });
+    const pdfDownloaded = await downloadSentenceGrammarHistoryPdf({
+      players,
+      bankCount: displayedBankCount,
+      totalBankTiles: TOTAL_BANK_TILES,
+      gameMode,
+      language,
+      board,
+      tempPlacements,
+      isAutoExpandMode,
+      boardCanvas: res.canvas,
+      dateStamp: res.dateStamp,
+    });
+    if (res.copiedToClipboard || pdfDownloaded) {
+      if (boardCopiedTimerRef.current) {
+        clearTimeout(boardCopiedTimerRef.current);
+      }
+      setBoardCopied(true);
+      boardCopiedTimerRef.current = setTimeout(() => {
+        setBoardCopied(false);
+        boardCopiedTimerRef.current = null;
+      }, 2500);
+    }
+  };
+
+  // Dispute state & handler:
+  // 1) Marks a player-formed statement rejected by the computer as disputed
+  // 2) Or marks the latest sentence played by the computer as disputed for later review
+  const hasAttemptedStatement =
+    tempPlacements.length >= 2 || (currentValidation?.sentences?.length ?? 0) > 0;
+  const currentRejectedKey =
+    hasAttemptedStatement && currentValidation && !currentValidation.isValid
+      ? tempPlacements
+          .map((p) => `${p.row},${p.col}:${p.tile.id}:${p.tile.customName || ''}`)
+          .join('|')
+      : null;
+
+  const canDisputeRejectedPlayerMove =
+    Boolean(currentRejectedKey) &&
+    Boolean(activePlayer && !activePlayer.isAi) &&
+    !disputedRejectedKeys.includes(currentRejectedKey!);
+
+  const aiPlayer = players.find((p) => p.isAi);
+  const lastAiSentence =
+    aiPlayer && aiPlayer.sentencesFormed.length > 0
+      ? aiPlayer.sentencesFormed[aiPlayer.sentencesFormed.length - 1]
+      : null;
+  const canDisputeLastAiSentence =
+    !currentRejectedKey && Boolean(lastAiSentence && !lastAiSentence.isDisputed);
+
+  const canDispute = canDisputeRejectedPlayerMove || canDisputeLastAiSentence;
+
+  const disputeTitle = canDisputeRejectedPlayerMove
+    ? isAr
+      ? 'تسجيل جملتك المرفوضة كمحل اعتراض للمراجعة في سجل التاريخ وملف PDF'
+      : 'Mark your rejected statement as disputed in the sentence history for later review'
+    : canDisputeLastAiSentence
+    ? isAr
+      ? `الاعتراض على آخر جملة لعبها الكمبيوتر: "${lastAiSentence?.text}"`
+      : `Mark last computer sentence "${lastAiSentence?.text}" as disputed for later review`
+    : isAr
+    ? 'الاعتراض على آخر جملة للكمبيوتر أو جملة مرفوضة'
+    : 'Dispute last computer sentence or a rejected player statement';
+
+  const handleDispute = () => {
+    if (!canDispute) return;
+    sound.playTilePick();
+
+    if (canDisputeRejectedPlayerMove && activePlayer && currentValidation && currentRejectedKey) {
+      const attemptedText =
+        currentValidation.sentences.length > 0
+          ? currentValidation.sentences.map((s) => s.text).join(' & ')
+          : tempPlacements
+              .map((p) => (p.tile.isWildcard && p.tile.customName ? p.tile.customName : p.tile.word))
+              .join(' ');
+
+      const inferredDir: 'horizontal' | 'vertical' =
+        currentValidation.sentences[0]?.direction ||
+        (tempPlacements.length >= 2 && tempPlacements[0].col === tempPlacements[1].col
+          ? 'vertical'
+          : 'horizontal');
+
+      const totalRecordedPlays = players.reduce(
+        (sum, pl) => sum + pl.sentencesFormed.length,
+        0
+      );
+      const acceptedCount = activePlayer.sentencesFormed.filter(
+        (s) => s.disputeType !== 'rejected_player_move'
+      ).length;
+
+      const rejectionMsg =
+        currentValidation.errorMessage || 'Statement rejected by computer validation';
+
+      setPlayers((prev) =>
+        prev.map((p, idx) => {
+          if (idx !== activePlayerIndex) return p;
+          return {
+            ...p,
+            sentencesFormed: [
+              ...p.sentencesFormed,
+              {
+                text: attemptedText,
+                score: 0,
+                turn: acceptedCount + 1,
+                playOrder: totalRecordedPlays + 1,
+                direction: inferredDir,
+                playerId: activePlayer.id,
+                isDisputed: true,
+                disputeType: 'rejected_player_move',
+                disputeReason: rejectionMsg,
+                ruleName: isAr
+                  ? 'جملة مرفوضة — محل اعتراض للمراجعة'
+                  : 'Rejected Statement — Disputed for Review',
+                ruleExplanation: `Rejected by Computer: ${rejectionMsg} (Marked as disputed by player for later review).`,
+              },
+            ],
+          };
+        })
+      );
+      setDisputedRejectedKeys((prev) => [...prev, currentRejectedKey]);
+    } else if (canDisputeLastAiSentence && aiPlayer) {
+      setPlayers((prev) =>
+        prev.map((p) => {
+          if (!p.isAi || p.sentencesFormed.length === 0) return p;
+          const lastIdx = p.sentencesFormed.length - 1;
+          return {
+            ...p,
+            sentencesFormed: p.sentencesFormed.map((rec, idx) =>
+              idx === lastIdx
+                ? {
+                    ...rec,
+                    isDisputed: true,
+                    disputeType: 'disputed_ai_move',
+                    disputeReason: 'Last computer sentence marked as disputed by player for later review.',
+                  }
+                : rec
+            ),
+          };
+        })
+      );
+    }
+
+    if (disputeTimerRef.current) {
+      clearTimeout(disputeTimerRef.current);
+    }
+    setDisputeFeedback(true);
+    disputeTimerRef.current = setTimeout(() => {
+      setDisputeFeedback(false);
+      disputeTimerRef.current = null;
+    }, 2500);
+  };
+
   if (showWelcome) {
     return (
-      <WelcomeScreen
-        language={language}
-        onToggleLanguage={handleToggleLanguage}
-        gameMode={gameMode}
-        onSelectGameMode={(mode) => setGameMode(mode)}
-        onStartGame={handleStartFromWelcome}
-      />
+      <>
+        <WelcomeScreen
+          language={language}
+          onToggleLanguage={handleToggleLanguage}
+          gameMode={gameMode}
+          onSelectGameMode={(mode) => setGameMode(mode)}
+          onStartGame={handleStartFromWelcome}
+          onOpenGrammarRules={() => setIsGrammarRulesOpen(true)}
+          onOpenStory={() => setIsStoryOpen(true)}
+          onOpenMediaKit={() => setIsMediaKitOpen(true)}
+          onDownloadZip={handleDownloadZip}
+          worldwideVisits={worldwideVisits}
+        />
+
+        <GrammarValidationRulesModal
+          isOpen={isGrammarRulesOpen}
+          onClose={() => setIsGrammarRulesOpen(false)}
+          language={language}
+        />
+
+        <MediaKitModal
+          isOpen={isMediaKitOpen}
+          onClose={() => setIsMediaKitOpen(false)}
+          language={language}
+        />
+
+        <StoryAndGuideModal
+          isOpen={isStoryOpen}
+          onClose={() => setIsStoryOpen(false)}
+          language={language}
+        />
+      </>
     );
   }
 
@@ -957,9 +1230,11 @@ export default function App() {
         >
           <div className="relative w-14 h-14 rounded-lg bg-gradient-to-b from-blue-500 to-blue-700 border-2 border-cyan-300 text-white shadow-2xl ring-4 ring-cyan-400/50 flex flex-col items-center justify-center p-1">
             <span
-              className={`font-bold text-center leading-tight px-0.5 ${
-                flyingTile.tile.word.length > 7
-                  ? 'text-[10px]'
+              className={`font-bold text-center leading-tight px-0.5 whitespace-nowrap ${
+                flyingTile.tile.word.length >= 9
+                  ? 'text-[8.5px] tracking-tighter'
+                  : flyingTile.tile.word.length > 7
+                  ? 'text-[9.5px] tracking-tighter'
                   : flyingTile.tile.word.length > 4
                   ? 'text-xs'
                   : 'text-sm'
@@ -997,7 +1272,7 @@ export default function App() {
           </div>
         )}
 
-        {/* Score Board with Bank Counter and Expand/Shrink Button */}
+        {/* Score Board with Bank Counter and Expand/Shrink + Copy Board Buttons */}
         <ScoreBoard
           players={players}
           activePlayerIndex={activePlayerIndex}
@@ -1006,6 +1281,8 @@ export default function App() {
           language={language}
           isAutoExpandMode={isAutoExpandMode}
           onToggleExpand={() => setIsAutoExpandMode((prev) => !prev)}
+          onCopyBoard={handleCopyBoard}
+          boardCopied={boardCopied}
           turnTimeLeft={activePlayer && !activePlayer.isAi ? turnTimeLeft : undefined}
           bankRef={bankRef}
           isDealing={isDealing}
@@ -1023,6 +1300,7 @@ export default function App() {
           language={language}
           players={players}
           isAutoExpandMode={isAutoExpandMode}
+          aiHighlightMove={aiHighlightMove}
         />
 
         {/* Player Tile Rack (Your 10-Word Rack) */}
@@ -1067,7 +1345,7 @@ export default function App() {
           />
         )}
 
-        {/* Unified Single-Line Actions: Timer + Exchange + Play */}
+        {/* Unified Single-Line Actions: Timer + Exchange + Dispute + Play */}
         <TurnActions
           onPlayMove={handlePlayMove}
           validation={currentValidation}
@@ -1090,92 +1368,15 @@ export default function App() {
           }}
           rackEmpty={!activePlayer || activePlayer.rack.length === 0}
           bankEmpty={bank.length === 0}
+          onDispute={handleDispute}
+          canDispute={canDispute}
+          disputeTitle={disputeTitle}
+          disputeFeedback={disputeFeedback}
         />
 
         {/* Played Sentences & Grammar Rules Log (Both Players) */}
         <PlayedSentencesLog players={players} language={language} />
       </main>
-
-      {/* Footer with author feedback email, worldwide visits counter & Download ZIP */}
-      <footer className="w-full bg-slate-900/90 border-t border-slate-800 py-3 px-4 text-center text-xs text-slate-400 mt-auto select-none">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-center">
-          {/* Email Feedback */}
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <div className="flex items-center gap-1.5 text-slate-300">
-              <Mail className="w-4 h-4 text-blue-400 shrink-0" />
-              <span className="font-medium">
-                {isAr ? 'لإرسال الآراء والملاحظات:' : 'To send feedback or suggestions:'}
-              </span>
-            </div>
-            <a
-              href="mailto:Mtk6300@hotmail.com?subject=Fun%20Grammar%20Game%20Feedback"
-              className="text-blue-400 hover:text-blue-300 font-semibold underline underline-offset-4 decoration-blue-500/50 hover:decoration-blue-400 transition-colors flex items-center gap-1"
-            >
-              <span>Mtk6300@hotmail.com</span>
-            </a>
-          </div>
-
-          {/* Worldwide Page Visits Counter */}
-          <div
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-300 text-xs shadow-xs"
-            title={
-              isAr
-                ? 'عدد مرات زيارة وتصفح اللعبة حول العالم'
-                : 'Total number of times the game page is visited worldwide'
-            }
-          >
-            <div className="relative flex items-center justify-center">
-              <Globe className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            </div>
-            <span className="text-slate-400 font-medium">
-              {isAr ? 'الزيارات حول العالم:' : 'Worldwide Visits:'}
-            </span>
-            <span className="font-mono font-extrabold text-cyan-300 tabular-nums">
-              {worldwideVisits !== null ? worldwideVisits.toLocaleString() : '...'}
-            </span>
-          </div>
-
-          {/* Download Game ZIP, Story & Media Kit Buttons */}
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <button
-              onClick={() => setIsStoryOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition-all transform hover:scale-105 active:scale-95"
-              title={isAr ? 'قراءة وتنزيل قصة اللعبة وشرحها الكامل' : 'Read & download the game story and complete explanation'}
-            >
-              <ScrollText className="w-3.5 h-3.5" />
-              <span>{isAr ? 'قصة اللعبة وشرحها' : 'Game Story & Guide'}</span>
-            </button>
-
-            <button
-              onClick={() => setIsMediaKitOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-md transition-all transform hover:scale-105 active:scale-95"
-              title={isAr ? 'معاينة وتنزيل غلاف اللعبة وملف التعريف المتحرك GIF والصور' : 'Preview & download game cover, intro GIF, and promotional images'}
-            >
-              <ImageIcon className="w-3.5 h-3.5" />
-              <span>{isAr ? 'الغلاف والصور و GIF' : 'Cover, GIF & Images'}</span>
-            </button>
-
-            <a
-              href="./fun-grammar-game.zip"
-              download="fun-grammar-game.zip"
-              onClick={handleDownloadZip}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md transition-all transform hover:scale-105 active:scale-95"
-              title={isAr ? 'تحميل ملف اللعبة المضغوط (ZIP) لرفعه على منصات الألعاب' : 'Download game ZIP file to upload to game platforms'}
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>{isAr ? 'تحميل ملف اللعبة (ZIP)' : 'Download Game ZIP'}</span>
-            </a>
-          </div>
-
-          {/* Copyright */}
-          <span className="text-slate-500 text-[11px]">
-            {isAr
-              ? 'ابتكار: د. محمد تقي الخنيزي (البحرين © 2005)'
-              : 'Invented by Dr. Mohammed Taqi Alkhonaizi (Bahrain © 2005)'}
-          </span>
-        </div>
-      </footer>
 
       {/* Game Over Modal */}
       {isGameOver && (
@@ -1217,13 +1418,40 @@ export default function App() {
                 ))}
             </div>
 
-            <button
-              onClick={() => startNewGame(gameMode, true)}
-              className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>{isAr ? 'العب مجدداً' : 'Play Again'}</span>
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+              <button
+                onClick={handleCopyBoard}
+                className={`flex-1 py-3 px-4 rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2 border cursor-pointer ${
+                  boardCopied
+                    ? 'bg-emerald-800/80 border-emerald-400 text-emerald-100'
+                    : 'bg-slate-800 hover:bg-slate-700 border-cyan-500/60 text-cyan-200'
+                }`}
+                title={
+                  isAr
+                    ? 'حفظ ملف PDF يحتوي على صورة اللوحة وسجل تطابق الجمل والقواعد النحوية'
+                    : 'Save PDF containing the board picture & sentence-grammar rules history'
+                }
+              >
+                {boardCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+                <span>
+                  {boardCopied
+                    ? isAr
+                      ? 'تم حفظ PDF!'
+                      : 'Saved PDF!'
+                    : isAr
+                    ? 'نسخ اللوحة'
+                    : 'Copy Board'}
+                </span>
+              </button>
+
+              <button
+                onClick={() => startNewGame(gameMode, true)}
+                className="flex-1 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>{isAr ? 'العب مجدداً' : 'Play Again'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -12,13 +12,13 @@ interface TileDefinition {
 export const TILE_DEFINITIONS: TileDefinition[] = [
   // Sheet 1 (50 tiles)
   { word: 'Is', category: 'verb', count: 10, charCount: 2 },
-  { word: 'Some body', category: 'noun', count: 3, charCount: 8 },
+  { word: 'Somebody', category: 'noun', count: 3, charCount: 8 },
   { word: 'Name', category: 'noun', count: 3, charCount: 4 },
   { word: 'N3', category: 'wildcard', count: 1, charCount: 3, isWildcard: true, wildcardLen: 3 },
   { word: 'N4', category: 'wildcard', count: 1, charCount: 4, isWildcard: true, wildcardLen: 4 },
   { word: 'N5', category: 'wildcard', count: 1, charCount: 5, isWildcard: true, wildcardLen: 5 },
   { word: 'N6', category: 'wildcard', count: 1, charCount: 6, isWildcard: true, wildcardLen: 6 },
-  { word: 'Some thing', category: 'noun', count: 3, charCount: 9 },
+  { word: 'Something', category: 'noun', count: 3, charCount: 9 },
   { word: 'Thing', category: 'noun', count: 3, charCount: 5 },
   { word: 'A', category: 'determiner_conj', count: 3, charCount: 1 },
   { word: 'And', category: 'determiner_conj', count: 1, charCount: 3 },
@@ -91,10 +91,23 @@ export const TILE_DEFINITIONS: TileDefinition[] = [
   { word: 'In', category: 'adverb_prep', count: 1, charCount: 2 },
   { word: 'To', category: 'adverb_prep', count: 1, charCount: 2 },
   { word: 'For', category: 'adverb_prep', count: 1, charCount: 3 },
+
+  // WH-Question Tools (9 tiles, 1 each)
+  { word: 'Where', category: 'wh_question', count: 1, charCount: 5 },
+  { word: 'When', category: 'wh_question', count: 1, charCount: 4 },
+  { word: 'Who', category: 'wh_question', count: 1, charCount: 3 },
+  { word: 'What', category: 'wh_question', count: 1, charCount: 4 },
+  { word: 'Why', category: 'wh_question', count: 1, charCount: 3 },
+  { word: 'How', category: 'wh_question', count: 1, charCount: 3 },
+  { word: 'Whom', category: 'wh_question', count: 1, charCount: 4 },
+  { word: 'Whose', category: 'wh_question', count: 1, charCount: 5 },
+  { word: 'Which', category: 'wh_question', count: 1, charCount: 5 },
 ];
 
+export const TOTAL_BANK_TILES = TILE_DEFINITIONS.reduce((sum, def) => sum + def.count, 0);
+
 /**
- * Generate full 100-tile bank with unique IDs
+ * Generate full 109-tile bank with unique IDs
  */
 export function createNewTileBank(): TileData[] {
   const bank: TileData[] = [];

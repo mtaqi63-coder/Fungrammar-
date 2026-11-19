@@ -643,7 +643,7 @@ export const DemonstrationModal: React.FC<DemonstrationModalProps> = ({
                 <div className="text-xs text-slate-300 text-center">
                   {isAr
                     ? 'بعد كل حركة، يُعاد ملء حامل اللاعب تلقائياً إلى 10 كلمات حتى ينفد بنك الكلمات!'
-                    : 'Your rack automatically refills to 10 words from the 100-tile bank after every move!'}
+                    : 'Your rack automatically refills to 10 words from the 109-tile bank after every move!'}
                 </div>
               </div>
             )}

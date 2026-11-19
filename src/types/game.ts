@@ -5,12 +5,13 @@ export type TileCategory =
   | 'adjective'
   | 'adverb_prep'
   | 'determiner_conj'
+  | 'wh_question'
   | 'wildcard'
   | 'punctuation';
 
 export interface TileData {
   id: string;
-  word: string; // e.g. "Is", "Some body", "N3", "."
+  word: string; // e.g. "Is", "Somebody", "N3", "."
   displayWord: string;
   category: TileCategory;
   charCount: number; // For scoring (excluding spaces/dots)
@@ -23,6 +24,7 @@ export interface BoardCell {
   row: number;
   col: number;
   tile: TileData | null;
+  isCenter?: boolean;
   isTemp?: boolean; // currently placed in pending move
   playerId?: string;
   turnPlayed?: number;
@@ -32,10 +34,14 @@ export interface PlayedSentenceRecord {
   text: string;
   score: number;
   turn: number;
+  playOrder?: number;
   ruleName?: string;
   ruleExplanation?: string;
   direction?: 'horizontal' | 'vertical';
   playerId?: string;
+  isDisputed?: boolean;
+  disputeType?: 'disputed_ai_move' | 'rejected_player_move';
+  disputeReason?: string;
 }
 
 export interface Player {

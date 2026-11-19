@@ -35,12 +35,12 @@ export const WELCOME_STORY_SHORT = {
   leadEn:
     'Created in Bahrain in 2005 by Dr. Mohammed Taqi Alkhonaizi (Ministry of Information Reg. No. 1213), Fun Grammar turns learning English grammar from dry memorization into an engaging board game.',
   pointsAr: [
-    'الفكرة المبتكرة: بدلاً من الحروف المفردة في سكرابل، يستخدم اللاعبون 100 بطاقة لكلمات إنجليزية كاملة لتكوين جمل صحيحة ومتقاطعة أفقياً ورأسياً.',
+    'الفكرة المبتكرة: بدلاً من الحروف المفردة في سكرابل، يستخدم اللاعبون 109 بطاقات لكلمات إنجليزية كاملة (تشمل أدوات الاستفهام Where, When, Who, Whom, Whose, Which, What, Why, How) لتكوين جمل صحيحة ومتقاطعة أفقياً ورأسياً.',
     'احتساب النقاط: تكسب نقطة واحدة مقابل كل حرف في الجملة الصحيحة التي تبنيها على اللوحة.',
     'من الطاولة إلى العالم: بدأت كلعبة لوحية للمدارس والعائلات، واليوم تنطلق رقمياً بمواجهة الكمبيوتر أو لاعبين مع حكم قواعد فوري.',
   ],
   pointsEn: [
-    'Core Twist: Instead of single letters like Scrabble, players use 100 whole English word tiles to build valid intersecting sentences horizontally and vertically.',
+    'Core Twist: Instead of single letters like Scrabble, players use 109 whole English word tiles (including WH-question tools Where, When, Who, Whom, Whose, Which, What, Why, How) to build valid intersecting sentences horizontally and vertically.',
     'Scoring: Earn 1 point for every letter in each grammatically valid sentence formed on the grid.',
     'Tabletop to Digital: Born as a physical classroom & family board game, now available worldwide with an AI opponent, 2-player mode, and instant grammar validation.',
   ],
@@ -65,9 +65,9 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     eraAr: 'التصميم اللوحي المبتكر',
     eraEn: 'Innovative Board Design',
     bodyAr:
-      'استلهم المؤلف روح ألعاب الطاولة الكلاسيكية المحبوبة مثل لعبة "سكرابل" (Scrabble)، لكنه أحدث نقلة نوعية في فكرتها: فبدلاً من ترتيب الحروف لتكوين كلمات منفردة، يتنافس اللاعبون باستخدام بطاقات كلمات إنجليزية مختارة بعناية (100 بطاقة تغطي الضمائر، الأفعال المساعدة والأساسية، الأسماء، الصفات، حروف الجر، وأدوات التعريف والربط) لبناء جمل إنجليزية كاملة ومتقاطعة على لوحة ذات مربعات منظمة، بحيث يقرأ اللاعبون الجمل أفقياً ورأسياً ويكسبون نقاطاً بعدد حروف كل جملة صحيحة.',
+      'استلهم المؤلف روح ألعاب الطاولة الكلاسيكية المحبوبة مثل لعبة "سكرابل" (Scrabble)، لكنه أحدث نقلة نوعية في فكرتها: فبدلاً من ترتيب الحروف لتكوين كلمات منفردة، يتنافس اللاعبون باستخدام بطاقات كلمات إنجليزية مختارة بعناية (109 بطاقات تغطي الضمائر، الأفعال المساعدة والأساسية، الأسماء، الصفات، حروف الجر، أدوات الاستفهام التسع، وأدوات التعريف والربط) لبناء جمل إنجليزية كاملة ومتقاطعة على لوحة ذات مربعات منظمة، بحيث يقرأ اللاعبون الجمل أفقياً ورأسياً ويكسبون نقاطاً بعدد حروف كل جملة صحيحة.',
     bodyEn:
-      'Inspired by the social thrill of classic crossword board games like Scrabble, Dr. Alkhonaizi introduced a creative leap: instead of assembling single letters into isolated words, players play whole English word tiles—100 carefully curated cards spanning pronouns, auxiliary and action verbs, nouns, adjectives, prepositions, and articles—to construct interlocking, grammatically valid English sentences horizontally and vertically across the board.',
+      'Inspired by the social thrill of classic crossword board games like Scrabble, Dr. Alkhonaizi introduced a creative leap: instead of assembling single letters into isolated words, players play whole English word tiles—109 carefully curated cards spanning pronouns, auxiliary and action verbs, nouns, adjectives, prepositions, all 9 WH-question tools, and articles—to construct interlocking, grammatically valid English sentences horizontally and vertically across the board.',
   },
   {
     id: 3,
@@ -76,9 +76,9 @@ export const STORY_CHAPTERS: StoryChapter[] = [
     eraAr: 'النسخة التفاعلية الحديثة',
     eraEn: 'Modern Interactive Edition',
     bodyAr:
-      'بدأت اللعبة بصندوق لوحي واقعي يضم لوحة 15×15 مربعاً وحوامل كلمات زرقاء وبنية وبطاقات بلاستيكية متينة للطلاب والعائلات والمدارس. واليوم، تواصل اللعبة رسالتها في نسخة رقمية تفاعلية متكاملة تتيح اللعب ضد الكمبيوتر الذكي أو في وضع اللاعبين، مع لوحة تتوسع تلقائياً من 5×5 حتى 20×20، ومؤقت دور 60 ثانية، وميزة تبديل الكلمات، وحكم القواعد الفوري، لتصبح وسيلة ممتعة لتعلّم اللغة الإنجليزية والتنافس فيها في كل أنحاء العالم.',
+      'بدأت اللعبة بصندوق لوحي واقعي يضم لوحة 15×15 مربعاً وحوامل كلمات زرقاء وبنية وبطاقات بلاستيكية متينة للطلاب والعائلات والمدارس. واليوم، تواصل اللعبة رسالتها في نسخة رقمية تفاعلية متكاملة تتيح اللعب ضد الكمبيوتر الذكي أو في وضع اللاعبين، مع لوحة تتوسع تلقائياً لتترك دائماً مساحة لا تقل عن 3 بطاقات فارغة من كل جهة، ومؤقت دور 60 ثانية، وميزة تبديل الكلمات، وحكم القواعد الفوري، لتصبح وسيلة ممتعة لتعلّم اللغة الإنجليزية والتنافس فيها في كل أنحاء العالم.',
     bodyEn:
-      'What began as a physical tabletop edition with a 15×15 board, colorful racks, and 100 tangible word tiles for classrooms and families has now evolved into this interactive digital edition. Featuring an intelligent Computer opponent, 2-player Pass & Play, an auto-expanding grid (5×5 up to 20×20), a 60-second turn timer, tile exchange, and instant grammar validation, Fun Grammar brings playful English mastery to learners and players worldwide.',
+      'What began as a physical tabletop edition with a 15×15 board, colorful racks, and 109 word tiles for classrooms and families has now evolved into this interactive digital edition. Featuring an intelligent Computer opponent, 2-player Pass & Play, an auto-expanding grid that always leaves at least 3 empty spaces on every side, a 60-second turn timer, tile exchange, and instant grammar validation, Fun Grammar brings playful English mastery to learners and players worldwide.',
   },
 ];
 
@@ -88,13 +88,13 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     titleAr: '1. مكونات اللعبة وبداية الدور',
     titleEn: '1. Game Components & Setup',
     pointsAr: [
-      'يبدأ كل لاعب بسحب 10 بطاقات كلمات عشوائياً من بنك الكلمات الذي يحتوي على 100 بطاقة متنوعة.',
-      'تحتوي اللوحة على نجمة ذهبية في المنتصف (مركز البداية) وتتوسع تلقائياً أثناء اللعب من 5×5 حتى 20×20 مربعاً.',
+      'يبدأ كل لاعب بسحب 10 بطاقات كلمات عشوائياً من بنك الكلمات الذي يحتوي على 109 بطاقات متنوعة.',
+      'تحتوي اللوحة على نجمة ذهبية في المنتصف (مركز البداية) وتتوسع تلقائياً أثناء اللعب لتوفر دائماً مساحة 3 مربعات فارغة على الأقل من كل جانب.',
       'تحمل كل بطاقة كلمةً إنجليزيةً ورقماً صغيراً في الزاوية السفلية يمثل عدد حروفها (نقاطها الأساسية).',
     ],
     pointsEn: [
-      'Each player draws 10 word tiles at random from the 100-tile English grammar bank.',
-      'Play begins at the golden center star cell; the board expands dynamically from 5×5 up to 20×20 as sentences grow.',
+      'Each player draws 10 word tiles at random from the 109-tile English grammar bank.',
+      'Play begins at the golden center star cell; the board expands dynamically in every direction to always keep at least 3 open spaces on each side.',
       'Every tile displays its English word and a corner number showing its exact character count (point value).',
     ],
   },

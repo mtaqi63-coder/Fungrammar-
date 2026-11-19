@@ -48,8 +48,8 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose, languag
     },
     {
       id: 7,
-      en: 'Refer to authenticated grammar book in case of dispute.',
-      ar: 'يجب الرجوع لكتب القواعد المعتبرة في حالة المنازعات.',
+      en: 'Refer to authenticated grammar book (British Council LearnEnglish Grammar) in case of dispute.',
+      ar: 'يجب الرجوع لكتب القواعد المعتبرة (قواعد المجلس الثقافي البريطاني British Council LearnEnglish) في حالة المنازعات.',
     },
     {
       id: 8,
@@ -146,7 +146,7 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose, languag
             }`}
           >
             <Layers className="w-4 h-4 text-cyan-400" />
-            <span>{isAr ? 'مجموعة البطاقات (100 بطاقة)' : 'Complete Tile Set (100 Tiles)'}</span>
+            <span>{isAr ? 'مجموعة البطاقات (109 بطاقة)' : 'Complete Tile Set (109 Tiles)'}</span>
           </button>
 
           <button
@@ -186,8 +186,8 @@ export const RulesModal: React.FC<RulesModalProps> = ({ isOpen, onClose, languag
                   </h4>
                   <p className="leading-relaxed">
                     {isAr
-                      ? 'القواعد المرحة هي لعبة طاولة تعليمية تشبه لعبة سكرابل لكنها مبنية على تركيب الجمل الإنجليزية الصحيحة نحوياً باستخدام بطاقات الكلمات المتقاطعة وحساب النقاط بعدد حروف الجمل المتكونة.'
-                      : 'Fun Grammar is an educational board game created by Dr. Mohammed Taqi Alkhonaizi. Players interlock word tiles to build grammatically correct English sentences. Scoring is based on the total number of characters in all newly formed horizontal and vertical sentences.'}
+                      ? 'القواعد المرحة هي لعبة طاولة تعليمية تشبه لعبة سكرابل لكنها مبنية على تركيب الجمل الإنجليزية الصحيحة نحوياً باستخدام بطاقات الكلمات المتقاطعة وحساب النقاط بعدد حروف الجمل المتكونة، مع اعتماد مرجع قواعد المجلس الثقافي البريطاني (British Council LearnEnglish) للتحقق من صحة الجمل.'
+                      : 'Fun Grammar is an educational board game created by Dr. Mohammed Taqi Alkhonaizi. Players interlock word tiles to build grammatically correct English sentences verified against British Council LearnEnglish Grammar rules. Scoring is based on the total number of characters in all newly formed horizontal and vertical sentences.'}
                   </p>
                 </div>
               </div>

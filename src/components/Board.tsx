@@ -1,8 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BoardCell, PlacedTile, Player, TileData } from '../types/game';
-import { BOARD_SIZE, CENTER_ROW, CENTER_COL, isBoardEmpty, validatePlacementDirection } from '../utils/boardLogic';
+import {
+  BOARD_SIZE,
+  EDGE_MARGIN_TILES,
+  getBoardCenter,
+  getColumnLabel,
+  getVisibleBoardBounds,
+  isBoardEmpty,
+  validatePlacementDirection,
+} from '../utils/boardLogic';
 import { sound } from '../utils/audio';
-import { Sparkles, ArrowDown, ArrowRight, Info, AlertCircle } from 'lucide-react';
+import { Sparkles, ArrowDown, ArrowRight, Info, AlertCircle, Bot } from 'lucide-react';
+
+export interface AiMoveHighlight {
+  moveId: number;
+  sentenceCoords: { row: number; col: number }[];
+  placedCoords: { row: number; col: number }[];
+  sentenceText: string;
+}
 
 interface BoardProps {
   board: BoardCell[][];
@@ -16,6 +31,7 @@ interface BoardProps {
   language: 'en' | 'ar';
   players?: Player[];
   isAutoExpandMode?: boolean;
+  aiHighlightMove?: AiMoveHighlight | null;
 }
 
 export const Board: React.FC<BoardProps> = ({
@@ -30,52 +46,71 @@ export const Board: React.FC<BoardProps> = ({
   language,
   players,
   isAutoExpandMode = true,
+  aiHighlightMove = null,
 }) => {
   const isAr = language === 'ar';
   const [boardAlert, setBoardAlert] = useState<{ message: string; type: 'info' | 'warning' } | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const cellRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  const boardEmpty = isBoardEmpty(board) && tempPlacements.length === 0;
-
-  // Compute active bounds that expand as tiles are placed across the board up to 20x20
-  const activeBounds = React.useMemo(() => {
-    if (!isAutoExpandMode) {
-      return { minRow: 0, maxRow: BOARD_SIZE - 1, minCol: 0, maxCol: BOARD_SIZE - 1 };
-    }
-
-    const occupiedRows: number[] = [];
-    const occupiedCols: number[] = [];
-
-    for (let r = 0; r < BOARD_SIZE; r++) {
-      for (let c = 0; c < BOARD_SIZE; c++) {
-        if (board[r][c].tile) {
-          occupiedRows.push(r);
-          occupiedCols.push(c);
-        }
+  const aiSentenceSet = useMemo(() => {
+    const set = new Set<string>();
+    if (aiHighlightMove) {
+      for (const c of aiHighlightMove.sentenceCoords) {
+        set.add(`${c.row},${c.col}`);
       }
     }
+    return set;
+  }, [aiHighlightMove]);
 
-    for (const p of tempPlacements) {
-      occupiedRows.push(p.row);
-      occupiedCols.push(p.col);
+  const aiPlacedSet = useMemo(() => {
+    const set = new Set<string>();
+    if (aiHighlightMove) {
+      for (const c of aiHighlightMove.placedCoords) {
+        set.add(`${c.row},${c.col}`);
+      }
     }
+    return set;
+  }, [aiHighlightMove]);
 
-    // Always include starting center
-    occupiedRows.push(CENTER_ROW);
-    occupiedCols.push(CENTER_COL);
+  // Smoothly scroll the board viewport (and page section if needed) to bring computer's played sentence into center focus
+  useEffect(() => {
+    if (!aiHighlightMove || aiHighlightMove.sentenceCoords.length === 0) return;
 
-    const minR = Math.min(...occupiedRows);
-    const maxR = Math.max(...occupiedRows);
-    const minC = Math.min(...occupiedCols);
-    const maxC = Math.max(...occupiedCols);
+    let innerTimer: ReturnType<typeof setTimeout> | null = null;
+    const rafId = requestAnimationFrame(() => {
+      innerTimer = setTimeout(() => {
+        const targets = aiHighlightMove.sentenceCoords
+          .map(({ row, col }) => cellRefs.current[`${row}-${col}`])
+          .filter((el): el is HTMLDivElement => Boolean(el));
 
-    // Provide buffer of 1-2 cells around all placed tiles, with initial minimum 5x5 window centered around CENTER_ROW/CENTER_COL
-    const minRow = Math.max(0, Math.min(minR - 1, CENTER_ROW - 2));
-    const maxRow = Math.min(BOARD_SIZE - 1, Math.max(maxR + 1, CENTER_ROW + 2));
-    const minCol = Math.max(0, Math.min(minC - 1, CENTER_COL - 2));
-    const maxCol = Math.min(BOARD_SIZE - 1, Math.max(maxC + 1, CENTER_COL + 2));
+        if (targets.length === 0) return;
 
-    return { minRow, maxRow, minCol, maxCol };
-  }, [board, tempPlacements, isAutoExpandMode]);
+        const midTarget = targets[Math.floor(targets.length / 2)];
+        midTarget.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+          inline: 'center',
+        });
+      }, 80);
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (innerTimer) clearTimeout(innerTimer);
+    };
+  }, [aiHighlightMove]);
+
+  const numRows = board.length;
+  const numCols = board[0]?.length ?? BOARD_SIZE;
+  const center = React.useMemo(() => getBoardCenter(board), [board]);
+  const boardEmpty = isBoardEmpty(board) && tempPlacements.length === 0;
+
+  // Always expand visible bounds to allow space for at least 3 tiles on each side
+  const activeBounds = React.useMemo(
+    () => getVisibleBoardBounds(board, tempPlacements, isAutoExpandMode),
+    [board, tempPlacements, isAutoExpandMode]
+  );
 
   const visibleWidth = activeBounds.maxCol - activeBounds.minCol + 1;
   const visibleHeight = activeBounds.maxRow - activeBounds.minRow + 1;
@@ -104,7 +139,7 @@ export const Board: React.FC<BoardProps> = ({
       [r, c + 1],
     ];
     return neighbors.some(([nr, nc]) => {
-      if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) return false;
+      if (nr < 0 || nr >= numRows || nc < 0 || nc >= numCols) return false;
       return !!board[nr][nc]?.tile || tempPlacements.some((p) => p.row === nr && p.col === nc);
     });
   };
@@ -112,7 +147,7 @@ export const Board: React.FC<BoardProps> = ({
   // Determine if empty cell (r, c) is eligible for placement
   const isCellEligible = (r: number, c: number): boolean => {
     if (tempPlacements.length === 0) {
-      return boardEmpty ? (r === CENTER_ROW && c === CENTER_COL) : isAdjacentToPlacedTile(r, c);
+      return boardEmpty ? (r === center.row && c === center.col) : isAdjacentToPlacedTile(r, c);
     }
     const check = validatePlacementDirection(tempPlacements, r, c);
     return check.allowed;
@@ -148,31 +183,29 @@ export const Board: React.FC<BoardProps> = ({
     }
   };
 
-  // 20 Columns: A through T
-  const colLabels = [
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
-    'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
-  ];
-  const visibleColLabels = colLabels.slice(activeBounds.minCol, activeBounds.maxCol + 1);
+  // Dynamic column coordinate headers (A, B, ..., Z, AA, AB, ...)
+  const visibleColLabels = React.useMemo(() => {
+    const labels: string[] = [];
+    for (let c = activeBounds.minCol; c <= activeBounds.maxCol; c++) {
+      labels.push(getColumnLabel(c));
+    }
+    return labels;
+  }, [activeBounds.minCol, activeBounds.maxCol]);
 
-  // Dynamic responsive sizing based on active width
+  // Dynamic responsive sizing based on active width (minimum 36px/40px so longer words never clip)
   const cellSizeClass =
     visibleWidth <= 7
-      ? 'w-10 h-10 sm:w-11 sm:h-11'
+      ? 'w-11 h-11 sm:w-12 sm:h-12'
       : visibleWidth <= 12
-      ? 'w-9 h-9 sm:w-10 sm:h-10'
-      : visibleWidth <= 16
-      ? 'w-8 h-8 sm:w-9 sm:h-9'
-      : 'w-7 h-7 sm:w-8 sm:h-8';
+      ? 'w-10 h-10 sm:w-11 sm:h-11'
+      : 'w-9 h-9 sm:w-10 sm:h-10';
 
   const colHeaderWidthClass =
     visibleWidth <= 7
-      ? 'w-10 sm:w-11'
+      ? 'w-11 sm:w-12'
       : visibleWidth <= 12
-      ? 'w-9 sm:w-10'
-      : visibleWidth <= 16
-      ? 'w-8 sm:w-9'
-      : 'w-7 sm:w-8';
+      ? 'w-10 sm:w-11'
+      : 'w-9 sm:w-10';
 
   return (
     <div className="relative w-full flex flex-col items-center select-none">
@@ -194,61 +227,92 @@ export const Board: React.FC<BoardProps> = ({
         </div>
       )}
 
+      {/* Computer Move Focus Banner */}
+      {!boardAlert && aiHighlightMove && (
+        <div className="sticky top-1 z-40 mb-1 px-3 py-1.5 rounded-xl font-bold text-xs shadow-2xl border-2 border-yellow-300 bg-amber-950/95 text-yellow-100 ring-2 ring-yellow-400/50 flex items-center gap-2 animate-pulse max-w-xl text-center">
+          <Bot className="w-4 h-4 text-yellow-300 shrink-0" />
+          <span>
+            {isAr
+              ? `لعب الكمبيوتر: "${aiHighlightMove.sentenceText}"`
+              : `Computer played: "${aiHighlightMove.sentenceText}"`}
+          </span>
+        </div>
+      )}
+
       {/* Main Board Container */}
-      <div className="w-full overflow-auto max-h-[44vh] sm:max-h-[50vh] flex justify-center p-1 sm:p-1.5 rounded-xl bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border border-slate-800 shadow-2xl">
-        <div
-          style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'top center' }}
-          className="transition-transform duration-150 inline-block p-1.5 sm:p-2 rounded-lg bg-slate-900/90 border border-slate-800/80 shadow-inner"
-        >
-          {/* Top Column Coordinate Headers */}
-          <div className="flex mb-0.5 ml-5">
-            {visibleColLabels.map((col) => (
-              <div
-                key={col}
-                className={`${colHeaderWidthClass} text-center text-[9px] font-mono text-slate-500 font-semibold`}
-              >
-                {col}
-              </div>
-            ))}
-          </div>
-
-          {/* Grid Rows (Visible subset) */}
-          {board.slice(activeBounds.minRow, activeBounds.maxRow + 1).map((row, rOffset) => {
-            const r = activeBounds.minRow + rOffset;
-            const visibleRowCells = row.slice(activeBounds.minCol, activeBounds.maxCol + 1);
-
-            return (
-              <div key={r} className="flex items-center">
-                {/* Row Coordinate Header */}
-                <div className="w-5 text-right pr-1 text-[9px] font-mono text-slate-500 font-semibold">
-                  {r + 1}
+      <div
+        ref={scrollContainerRef}
+        dir="ltr"
+        className="w-full overflow-auto max-h-[44vh] sm:max-h-[50vh] p-1.5 sm:p-2 rounded-xl bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border border-slate-800 shadow-2xl"
+      >
+        <div className="min-w-full w-max flex justify-center">
+          <div
+            style={{ zoom: zoomLevel }}
+            className="inline-block px-2.5 py-2 sm:px-3.5 sm:py-2.5 rounded-lg bg-slate-900/90 border border-slate-800/80 shadow-inner"
+          >
+            {/* Top Column Coordinate Headers */}
+            <div className="flex items-center gap-[2px] mb-1 pl-7">
+              {visibleColLabels.map((col) => (
+                <div
+                  key={col}
+                  className={`shrink-0 ${colHeaderWidthClass} text-center text-[9px] font-mono text-slate-500 font-semibold`}
+                >
+                  {col}
                 </div>
+              ))}
+            </div>
 
-                {/* Row Cells */}
-                <div className="flex gap-[2px] mb-[2px]">
-                  {visibleRowCells.map((cell, cOffset) => {
-                    const c = activeBounds.minCol + cOffset;
-                    const tile = getTileAt(r, c);
-                    const isTemp = isTempAt(r, c);
-                    const isCenter = r === CENTER_ROW && c === CENTER_COL;
-                    const isComputer = isComputerTileAt(r, c);
-                    const isEligible = isCellEligible(r, c);
-                    const isCenterReady = isCenter && boardEmpty && selectedRackTile;
-                    const isTargetReady = selectedRackTile && !tile && isEligible;
+            {/* Grid Rows (Visible subset) */}
+            {board.slice(activeBounds.minRow, activeBounds.maxRow + 1).map((row, rOffset) => {
+              const r = activeBounds.minRow + rOffset;
+              const visibleRowCells = row.slice(activeBounds.minCol, activeBounds.maxCol + 1);
 
-                    const isToRight =
-                      tempPlacements.length >= 1 && r === tempPlacements[0].row && c > tempPlacements[0].col;
-                    const isToBottom =
-                      tempPlacements.length >= 1 && c === tempPlacements[0].col && r > tempPlacements[0].row;
+              return (
+                <div key={r} className="flex items-center">
+                  {/* Row Coordinate Header */}
+                  <div className="w-7 shrink-0 text-right pr-1.5 text-[9px] font-mono text-slate-500 font-semibold">
+                    {r + 1}
+                  </div>
 
-                  return (
-                    <div
-                      key={c}
-                      onClick={() => handleCellPress(r, c, tile, isTemp)}
-                      className={`relative ${cellSizeClass} rounded-md flex items-center justify-center transition-all cursor-pointer ${
+                  {/* Row Cells */}
+                  <div className="flex items-center gap-[2px] mb-[2px]">
+                    {visibleRowCells.map((cell, cOffset) => {
+                      const c = activeBounds.minCol + cOffset;
+                      const tile = getTileAt(r, c);
+                      const isTemp = isTempAt(r, c);
+                      const isCenter = r === center.row && c === center.col;
+                      const isComputer = isComputerTileAt(r, c);
+                      const isEligible = isCellEligible(r, c);
+                      const isCenterReady = isCenter && boardEmpty && selectedRackTile;
+                      const isTargetReady = selectedRackTile && !tile && isEligible;
+
+                      const isToRight =
+                        tempPlacements.length >= 1 && r === tempPlacements[0].row && c > tempPlacements[0].col;
+                      const isToBottom =
+                        tempPlacements.length >= 1 && c === tempPlacements[0].col && r > tempPlacements[0].row;
+                      const coordKey = `${r},${c}`;
+                      const isAiSentenceCell = aiSentenceSet.has(coordKey);
+                      const isAiPlacedCell = aiPlacedSet.has(coordKey);
+
+                    return (
+                      <div
+                        key={c}
+                        ref={(el) => {
+                          cellRefs.current[`${r}-${c}`] = el;
+                        }}
+                        onClick={() => handleCellPress(r, c, tile, isTemp)}
+                        className={`relative shrink-0 ${cellSizeClass} rounded-md flex items-center justify-center transition-all cursor-pointer ${
                         tile
                           ? isTemp
                             ? 'bg-amber-600 border-2 border-amber-300 text-white shadow-xl ring-2 ring-amber-400/50 transform -translate-y-0.5'
+                            : isAiSentenceCell
+                            ? `${
+                                isAiPlacedCell
+                                  ? 'bg-amber-700 border-2 border-yellow-300 text-amber-50'
+                                  : isComputer
+                                  ? 'bg-[#7c3d15] border-2 border-yellow-300 text-amber-50'
+                                  : 'bg-blue-600 border-2 border-yellow-300 text-white'
+                              } animate-ai-tile-blink`
                             : isComputer
                             ? 'bg-[#653312] border-2 border-[#8c4c1e] text-[#fff7ed] shadow-lg hover:brightness-110 ring-1 ring-[#451f08]/60'
                             : 'bg-blue-700 border-2 border-blue-500 text-white shadow-md hover:brightness-110'
@@ -303,14 +367,16 @@ export const Board: React.FC<BoardProps> = ({
 
                       {/* Placed Tile */}
                       {tile && (
-                        <div className="w-full h-full flex flex-col items-center justify-center p-0.5 relative">
+                        <div className="w-full h-full flex flex-col items-center justify-center p-0.5 relative overflow-hidden">
                           <span
-                            className={`font-bold text-center leading-tight tracking-tight ${
-                              tile.word.length > 7
-                                ? 'text-[9px] sm:text-[10px]'
+                            className={`font-bold text-center leading-none max-w-full px-0.5 whitespace-nowrap ${
+                              tile.word.length >= 9
+                                ? 'text-[6.5px] sm:text-[7.5px] tracking-tighter'
+                                : tile.word.length > 7
+                                ? 'text-[7.5px] sm:text-[8.5px] tracking-tighter'
                                 : tile.word.length > 4
-                                ? 'text-[11px] sm:text-[12px]'
-                                : 'text-xs sm:text-sm'
+                                ? 'text-[10px] sm:text-[11.5px] tracking-tight'
+                                : 'text-xs sm:text-sm tracking-tight'
                             }`}
                           >
                             {tile.isWildcard && tile.customName ? tile.customName : tile.displayWord}
@@ -340,6 +406,7 @@ export const Board: React.FC<BoardProps> = ({
             </div>
             );
           })}
+          </div>
         </div>
       </div>
     </div>

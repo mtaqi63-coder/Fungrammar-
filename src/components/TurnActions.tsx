@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, AlertCircle, CheckCircle2, Clock, ArrowRightLeft, RotateCcw } from 'lucide-react';
+import { Check, AlertCircle, CheckCircle2, Clock, ArrowRightLeft, RotateCcw, Flag } from 'lucide-react';
 import { MoveValidation, TileData } from '../types/game';
 
 interface TurnActionsProps {
@@ -24,6 +24,12 @@ interface TurnActionsProps {
   onCancelExchangeMode?: () => void;
   rackEmpty?: boolean;
   bankEmpty?: boolean;
+
+  // Dispute controls (mark last computer move or rejected player statement as disputed)
+  onDispute?: () => void;
+  canDispute?: boolean;
+  disputeTitle?: string;
+  disputeFeedback?: boolean;
 }
 
 export const TurnActions: React.FC<TurnActionsProps> = ({
@@ -42,29 +48,33 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
   onCancelExchangeMode,
   rackEmpty = false,
   bankEmpty = false,
+  onDispute,
+  canDispute = false,
+  disputeTitle,
+  disputeFeedback = false,
 }) => {
   const isAr = language === 'ar';
   const isValidToPlay = hasTempTiles && !!validation?.isValid;
 
   return (
     <div className="w-full max-w-4xl flex flex-col items-center gap-1 select-none">
-      {/* Live Move Preview & Grammar Validation Status */}
-      {hasTempTiles && validation && (
+      {/* Live Move Preview & Grammar Validation Status + Recall Placed Button beside sentence */}
+      {hasTempTiles && (
         <div
           className={`w-full px-2.5 py-1.5 rounded-lg border text-xs flex items-center justify-between gap-2 transition-all ${
-            validation.isValid
+            validation?.isValid
               ? 'bg-emerald-950/60 border-emerald-500 text-emerald-200'
               : 'bg-rose-950/60 border-rose-500 text-rose-200'
           }`}
         >
-          <div className="flex items-center gap-2 min-w-0">
-            {validation.isValid ? (
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {validation?.isValid ? (
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             ) : (
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
             )}
             <div className="truncate">
-              {validation.isValid ? (
+              {validation?.isValid ? (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-white">
                     {validation.sentences.map((s) => `"${s.text}"`).join(' & ')}
@@ -74,19 +84,36 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
                   </span>
                 </div>
               ) : (
-                <span className="text-rose-200">{validation.errorMessage}</span>
+                <span className="text-rose-200">
+                  {validation?.errorMessage || (isAr ? 'كلمات موضوعة على اللوحة' : 'Tiles placed on board')}
+                </span>
               )}
             </div>
           </div>
 
-          {validation.isValid && (
-            <div className="flex items-center gap-1.5 shrink-0 bg-emerald-900/60 px-2 py-0.5 rounded-md border border-emerald-400/40">
-              <span className="text-white font-mono font-bold text-sm tabular-nums">+{validation.score}</span>
-              <span className="text-[10px] text-emerald-200 uppercase font-semibold">
-                {isAr ? 'حرف/نقطة' : 'Pts'}
-              </span>
-            </div>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {validation?.isValid && (
+              <div className="flex items-center gap-1 bg-emerald-900/60 px-2 py-0.5 rounded-md border border-emerald-400/40">
+                <span className="text-white font-mono font-bold text-sm tabular-nums">+{validation.score}</span>
+                <span className="text-[10px] text-emerald-200 uppercase font-semibold">
+                  {isAr ? 'حرف/نقطة' : 'Pts'}
+                </span>
+              </div>
+            )}
+
+            {onRecallAll && (
+              <button
+                onClick={onRecallAll}
+                disabled={disabled}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/95 hover:bg-slate-700 text-slate-100 border border-slate-600 text-xs font-semibold transition-colors shadow-sm shrink-0 cursor-pointer disabled:opacity-50"
+                title={isAr ? 'استرجاع الكلمات الموضوعة' : 'Recall placed tiles'}
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden sm:inline">{isAr ? 'استرجاع الكلمات' : 'Recall Placed'}</span>
+                <span className="sm:hidden">{isAr ? 'استرجاع' : 'Recall'}</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -115,20 +142,8 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
           )}
         </div>
 
-        {/* Center: Recall Placed (if placed) & Exchange Controls */}
+        {/* Center: Exchange Controls */}
         <div className="flex items-center gap-1.5 sm:gap-2">
-          {hasTempTiles && onRecallAll && (
-            <button
-              onClick={onRecallAll}
-              disabled={disabled}
-              className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition-colors shadow-sm shrink-0"
-              title={isAr ? 'استرجاع الكلمات الموضوعة' : 'Recall placed tiles'}
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">{isAr ? 'استرجاع الكلمات' : 'Recall Placed'}</span>
-              <span className="sm:hidden">{isAr ? 'استرجاع' : 'Recall'}</span>
-            </button>
-          )}
 
           {/* Exchange Button */}
           {onConfirmExchange && onStartExchangeMode && (
@@ -210,24 +225,57 @@ export const TurnActions: React.FC<TurnActionsProps> = ({
           )}
         </div>
 
-        {/* Right: Play Action Button */}
-        <button
-          onClick={onPlayMove}
-          disabled={disabled || !isValidToPlay}
-          className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all shadow-lg shrink-0 ${
-            isValidToPlay
-              ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white ring-4 ring-emerald-400/70 shadow-xl shadow-emerald-500/40 transform scale-105 active:scale-95 animate-pulse'
-              : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
-          }`}
-        >
-          <Check className="w-4 h-4 stroke-[2.5]" />
-          <span>{isAr ? 'العب' : 'Play'}</span>
-          {isValidToPlay && validation?.score !== undefined && (
-            <span className="ml-0.5 px-1.5 py-0.5 rounded bg-white/20 text-white text-xs font-mono font-bold">
-              +{validation.score}
-            </span>
+        {/* Right: Red Dispute Button + Play Action Button */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {onDispute && (
+            <button
+              onClick={onDispute}
+              disabled={disabled || !canDispute}
+              title={
+                disputeTitle ||
+                (isAr
+                  ? 'اعتراض: تعليم آخر جملة للكمبيوتر أو جملتك المرفوضة كمحل اعتراض في سجل التاريخ'
+                  : 'Dispute: Mark last computer sentence or your rejected statement as disputed in history')
+              }
+              className={`flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-md shrink-0 border ${
+                disputeFeedback
+                  ? 'bg-red-700 text-white border-red-300 ring-2 ring-red-400/70 shadow-red-900/50'
+                  : canDispute && !disabled
+                  ? 'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white border-rose-400 shadow-lg shadow-red-900/40 active:scale-95 cursor-pointer'
+                  : 'bg-rose-950/40 text-rose-400/50 border-rose-900/50 cursor-not-allowed opacity-65'
+              }`}
+            >
+              <Flag className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>
+                {disputeFeedback
+                  ? isAr
+                    ? 'تم الاعتراض!'
+                    : 'Disputed!'
+                  : isAr
+                  ? 'اعتراض'
+                  : 'Dispute'}
+              </span>
+            </button>
           )}
-        </button>
+
+          <button
+            onClick={onPlayMove}
+            disabled={disabled || !isValidToPlay}
+            className={`flex items-center gap-1.5 sm:gap-2 px-4 sm:px-6 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all shadow-lg shrink-0 ${
+              isValidToPlay
+                ? 'bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-400 text-white ring-4 ring-emerald-400/70 shadow-xl shadow-emerald-500/40 transform scale-105 active:scale-95 animate-pulse'
+                : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
+            }`}
+          >
+            <Check className="w-4 h-4 stroke-[2.5]" />
+            <span>{isAr ? 'العب' : 'Play'}</span>
+            {isValidToPlay && validation?.score !== undefined && (
+              <span className="ml-0.5 px-1.5 py-0.5 rounded bg-white/20 text-white text-xs font-mono font-bold">
+                +{validation.score}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

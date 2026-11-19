@@ -153,7 +153,7 @@ export const GameManualPdfModal: React.FC<GameManualPdfModalProps> = ({
             }`}
           >
             <Layers className="w-4 h-4 text-emerald-400" />
-            <span>{isAr ? 'جرد الكلمات (100 بطاقة)' : '100 Tile Inventory'}</span>
+            <span>{isAr ? 'جرد الكلمات (109 بطاقة)' : '109 Tile Inventory'}</span>
           </button>
         </div>
 
@@ -211,7 +211,7 @@ export const GameManualPdfModal: React.FC<GameManualPdfModalProps> = ({
                   </h4>
                   <ul className="space-y-1.5 text-xs text-slate-300">
                     <li>• <strong>Board:</strong> 15×15 grid (225 cells) with center star cell at Row 8, Col H (7,7).</li>
-                    <li>• <strong>Tile Count:</strong> 100 tiles total (97 word cards + 3 "." full stop tiles).</li>
+                    <li>• <strong>Tile Count:</strong> 109 tiles total (106 word cards including 9 WH-question tools + 3 "." full stop tiles).</li>
                     <li>• <strong>Rack Size:</strong> Exactly 10 tiles per player at all times.</li>
                     <li>• <strong>Players:</strong> 2 to 4 players, or solo training vs Computer.</li>
                   </ul>
@@ -317,7 +317,7 @@ export const GameManualPdfModal: React.FC<GameManualPdfModalProps> = ({
                 { n: 4, en: 'Sentence should be readable left to right or up down according to 1st player.', ar: 'يجب أن تقرأ الجملة من اليسار إلى اليمين أو من الأعلى للأسفل بالنسبة للاعب الذي ابتدأ اللعب.' },
                 { n: 5, en: 'Substitute played words immediately from the bank to maintain 10 tiles.', ar: 'عوض كل الكلمات التي تم اللعب بها بسحب كلمات جديدة من البنك لتحافظ على 10 بطاقات.' },
                 { n: 6, en: "Exchanging words from bank is possible but players' turn should be bypassed.", ar: 'يمكن استبدال الكلمات من البنك لكن دور اللاعب يجب أن يفوت.' },
-                { n: 7, en: 'Refer to authenticated grammar book in case of dispute.', ar: 'يجب الرجوع لكتب القواعد المعتبرة في حالة المنازعات.' },
+                { n: 7, en: 'Refer to authenticated grammar book (British Council LearnEnglish Grammar) in case of dispute.', ar: 'يجب الرجوع لكتب القواعد المعتبرة (قواعد المجلس الثقافي البريطاني British Council LearnEnglish) في حالة المنازعات.' },
                 { n: 8, en: 'The full stop "." allows new sentence to start or old one to finish on the same line.', ar: 'النقطة "." تنهي جملة سابقة وتبدأ جملة جديدة في نفس السطر أو العمود.' },
                 { n: 9, en: 'N3, N4, N5, N6 = any name of your choice equivalent to 3, 4, 5 or 6 characters accordingly.', ar: 'N3, N4, N5, N6 = أي اسم من اختيارك يتكون من 3 أو 4 أو 5 أو 6 حروف حسب الترتيب.' },
                 { n: 10, en: 'Expand horizontal or vertical at a time. 1 tile can be placed beside existing tiles.', ar: 'كون جملة أفقية أو عمودية واحدة في كل شوط. يمكن وضع بطاقة واحدة بجانب بطاقة موجودة.' },

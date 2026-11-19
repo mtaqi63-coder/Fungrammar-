@@ -46,6 +46,13 @@ const CATEGORY_CONFIG: Record<
     badgeBg: 'bg-cyan-900/60 text-cyan-200 border-cyan-600/40',
     textCol: 'text-cyan-300',
   },
+  wh_question: {
+    labelEn: 'WH-Question Tools',
+    labelAr: 'أدوات الاستفهام (WH)',
+    color: 'bg-rose-950/80 border-rose-500/60',
+    badgeBg: 'bg-rose-900/60 text-rose-200 border-rose-600/40',
+    textCol: 'text-rose-300',
+  },
   adverb_prep: {
     labelEn: 'Prepositions & Adverbs',
     labelAr: 'حروف الجر والظروف',
@@ -121,7 +128,7 @@ export const TileSetView: React.FC<TileSetViewProps> = ({ language }) => {
               <Layers className="w-4 h-4" />
             </div>
             <h3 className="text-base font-bold text-white tracking-wide">
-              {isAr ? 'مجموعة بطاقات الكلمات الكاملة (100 بطاقة)' : 'Complete Tile Set (100 Word Tiles)'}
+              {isAr ? `مجموعة بطاقات الكلمات الكاملة (${totalTilesCount} بطاقة)` : `Complete Tile Set (${totalTilesCount} Word Tiles)`}
             </h3>
             <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-blue-900/80 text-blue-200 border border-blue-500/50">
               {totalTilesCount} {isAr ? 'بطاقة' : 'tiles'}
@@ -130,7 +137,7 @@ export const TileSetView: React.FC<TileSetViewProps> = ({ language }) => {
           <p className="text-xs text-slate-400 mt-1">
             {isAr
               ? 'توزيع جميع الكلمات، عدد التكرار، ونقاط الحروف (القاعدة 11) مقسمة حسب الفئات النحوية'
-              : 'All 100 tiles by frequency count, letter score (Rule 11), and grammatical category'}
+              : `All ${totalTilesCount} tiles by frequency count, letter score (Rule 11), and grammatical category`}
           </p>
         </div>
 
@@ -158,8 +165,8 @@ export const TileSetView: React.FC<TileSetViewProps> = ({ language }) => {
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={
               isAr
-                ? 'ابحث عن أي كلمة (مثال: Is, Were, Fatima, Some body)...'
-                : 'Search any word (e.g. Is, Were, Fatima, Some body)...'
+                ? 'ابحث عن أي كلمة (مثال: Is, Were, Fatima, Somebody)...'
+                : 'Search any word (e.g. Is, Were, Fatima, Somebody)...'
             }
             className="w-full pl-9 pr-3 py-1.5 bg-slate-950/70 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
           />
@@ -249,8 +256,10 @@ export const TileSetView: React.FC<TileSetViewProps> = ({ language }) => {
                 >
                   <span
                     className={`font-bold text-center leading-tight tracking-tight ${
-                      tileDef.word.length > 7
-                        ? 'text-[10px]'
+                      tileDef.word.length >= 9
+                        ? 'text-[9px] tracking-tighter'
+                        : tileDef.word.length > 7
+                        ? 'text-[9.5px] tracking-tighter'
                         : tileDef.word.length > 4
                         ? 'text-xs'
                         : 'text-sm'
@@ -298,11 +307,11 @@ export const TileSetView: React.FC<TileSetViewProps> = ({ language }) => {
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-indigo-500" />
-            <span>{isAr ? 'الورقة 2: 50 بطاقة (الضمائر والصفات وحروف الجر)' : 'Sheet 2: 50 Vocabulary Tiles (Pronouns, Adjectives, Prepositions)'}</span>
+            <span>{isAr ? 'الورقة 2 + أدوات الاستفهام: 59 بطاقة (الضمائر، الصفات، حروف الجر، وWH)' : 'Sheet 2 + WH Tools: 59 Vocabulary Tiles (Pronouns, Adjectives, Prepositions, Where/When/Who/Whom/Whose/Which/What/Why/How)'}</span>
           </span>
         </div>
         <div className="font-mono text-slate-300 font-bold">
-          {isAr ? 'المجموع الإجمالي: 100 بطاقة' : 'Total Bank: 100 Tiles'}
+          {isAr ? `المجموع الإجمالي: ${totalTilesCount} بطاقة` : `Total Bank: ${totalTilesCount} Tiles`}
         </div>
       </div>
     </div>

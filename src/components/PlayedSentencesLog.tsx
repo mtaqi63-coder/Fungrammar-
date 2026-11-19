@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Player, PlayedSentenceRecord } from '../types/game';
-import { BookOpen, Bot, User, ArrowRight, ArrowDown, Sparkles, ChevronDown, ChevronUp, PlayCircle } from 'lucide-react';
+import { BookOpen, Bot, User, ArrowRight, ArrowDown, Sparkles, ChevronDown, ChevronUp, PlayCircle, Flag } from 'lucide-react';
 
 interface PlayedSentencesLogProps {
   players: Player[];
@@ -16,7 +16,7 @@ interface EnrichedSentenceRecord extends PlayedSentenceRecord {
 
 export const PlayedSentencesLog: React.FC<PlayedSentencesLogProps> = ({ players, language }) => {
   const isAr = language === 'ar';
-  const [filter, setFilter] = useState<'all' | 'p1' | 'ai'>('all');
+  const [filter, setFilter] = useState<'all' | 'p1' | 'ai' | 'disputed'>('all');
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   // Collect and sort all sentences formed chronologically
@@ -33,12 +33,15 @@ export const PlayedSentencesLog: React.FC<PlayedSentencesLogProps> = ({ players,
     });
   });
 
-  // Sort descending by turn so latest sentences appear first
-  allSentences.sort((a, b) => b.turn - a.turn);
+  // Sort descending by playOrder (or turn) so latest sentences appear first
+  allSentences.sort((a, b) => (b.playOrder ?? b.turn) - (a.playOrder ?? a.turn));
+
+  const disputedCount = allSentences.filter((s) => s.isDisputed).length;
 
   const filteredSentences = allSentences.filter((s) => {
     if (filter === 'p1') return !s.isAi;
     if (filter === 'ai') return s.isAi;
+    if (filter === 'disputed') return Boolean(s.isDisputed);
     return true;
   });
 
@@ -103,6 +106,20 @@ export const PlayedSentencesLog: React.FC<PlayedSentencesLogProps> = ({ players,
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
               <span>{isAr ? 'الكمبيوتر' : 'Computer'}</span>
             </button>
+            <button
+              onClick={() => setFilter('disputed')}
+              className={`px-2 py-1 rounded-md font-semibold flex items-center gap-1 transition-colors ${
+                filter === 'disputed'
+                  ? 'bg-red-700 text-white shadow-xs'
+                  : 'text-slate-400 hover:text-rose-300'
+              }`}
+            >
+              <Flag className="w-2.5 h-2.5 text-rose-400" />
+              <span>
+                {isAr ? 'الاعتراضات' : 'Disputed'}
+                {disputedCount > 0 ? ` (${disputedCount})` : ''}
+              </span>
+            </button>
           </div>
 
           {/* Collapse Button */}
@@ -134,17 +151,21 @@ export const PlayedSentencesLog: React.FC<PlayedSentencesLogProps> = ({ players,
           ) : (
             filteredSentences.map((rec, index) => {
               const isAi = rec.isAi;
+              const isDisputed = Boolean(rec.isDisputed);
+              const isRejected = rec.disputeType === 'rejected_player_move';
               return (
                 <div
                   key={`${rec.playerId || (isAi ? 'ai' : 'p1')}-${rec.turn}-${index}`}
                   className={`p-3 rounded-xl border transition-all ${
-                    isAi
+                    isDisputed
+                      ? 'bg-rose-950/40 border-red-500/80 ring-1 ring-red-500/30 hover:border-red-400'
+                      : isAi
                       ? 'bg-[#2a1608]/70 border-[#8c4c1e]/60 hover:border-[#b45309]'
                       : 'bg-blue-950/40 border-blue-600/50 hover:border-blue-500'
                   }`}
                 >
                   {/* Top line: Player info & badges */}
-                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
                     <div className="flex items-center gap-2">
                       <div
                         className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
@@ -165,6 +186,12 @@ export const PlayedSentencesLog: React.FC<PlayedSentencesLogProps> = ({ players,
                       <span className="text-[10px] font-mono text-slate-400">
                         {isAr ? `الدور ${rec.turn}` : `Turn ${rec.turn}`}
                       </span>
+                      {isDisputed && (
+                        <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-red-600 text-white border border-red-400 flex items-center gap-1 shadow-xs">
+                          <Flag className="w-2.5 h-2.5" />
+                          <span>{isAr ? 'محل اعتراض' : 'DISPUTED'}</span>
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -183,9 +210,15 @@ export const PlayedSentencesLog: React.FC<PlayedSentencesLogProps> = ({ players,
                           )}
                         </span>
                       )}
-                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-600/50">
-                        +{rec.score} {isAr ? 'نقاط' : 'pts'}
-                      </span>
+                      {isRejected ? (
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-rose-950/90 text-rose-300 border border-rose-500/60">
+                          {isAr ? 'مرفوضة · 0 ن' : 'Rejected · 0 pts'}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-600/50">
+                          +{rec.score} {isAr ? 'نقاط' : 'pts'}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -207,6 +240,12 @@ export const PlayedSentencesLog: React.FC<PlayedSentencesLogProps> = ({ players,
                     {rec.ruleExplanation && (
                       <p className="text-[11px] text-slate-300 bg-slate-900/70 p-2 rounded-md border border-slate-800 leading-relaxed font-sans">
                         {rec.ruleExplanation}
+                      </p>
+                    )}
+                    {isDisputed && rec.disputeReason && (
+                      <p className="text-[11px] text-rose-200 bg-rose-950/70 p-2 rounded-md border border-red-500/50 leading-relaxed font-sans flex items-center gap-1.5">
+                        <Flag className="w-3 h-3 text-red-400 shrink-0" />
+                        <span>{rec.disputeReason}</span>
                       </p>
                     )}
                   </div>

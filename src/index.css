@@ -1,1 +1,19 @@
 @import "tailwindcss";
+
+@keyframes aiTileBlink {
+  0%, 100% {
+    filter: brightness(1);
+    box-shadow: 0 0 0 2px #facc15, 0 0 10px rgba(250, 204, 21, 0.75);
+    transform: scale(1);
+  }
+  50% {
+    filter: brightness(1.45);
+    box-shadow: 0 0 0 3px #fef08a, 0 0 22px rgba(250, 204, 21, 1);
+    transform: scale(1.06);
+  }
+}
+
+.animate-ai-tile-blink {
+  animation: aiTileBlink 0.65s ease-in-out infinite;
+  z-index: 20;
+}

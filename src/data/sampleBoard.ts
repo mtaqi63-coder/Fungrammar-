@@ -10,16 +10,16 @@ export interface SampleBoardPlacement {
 // Reconstructed sentence grid directly from the author's official board image
 export const AUTHENTIC_2005_BOARD_PLACEMENTS: SampleBoardPlacement[] = [
   // Top left cluster
-  { row: 1, col: 0, word: 'Some body' },
+  { row: 1, col: 0, word: 'Somebody' },
   { row: 1, col: 1, word: 'Had' },
-  { row: 1, col: 3, word: 'Some body' },
+  { row: 1, col: 3, word: 'Somebody' },
 
   // Vertical does something
   { row: 2, col: 1, word: 'Does' },
-  { row: 2, col: 2, word: 'Some thing' },
+  { row: 2, col: 2, word: 'Something' },
   { row: 2, col: 3, word: 'Those' },
   { row: 2, col: 4, word: 'Have' },
-  { row: 2, col: 5, word: 'Some body' },
+  { row: 2, col: 5, word: 'Somebody' },
 
   { row: 3, col: 1, word: 'N6', customName: 'Fatima' },
   { row: 3, col: 4, word: 'Were' },
@@ -58,7 +58,7 @@ export const AUTHENTIC_2005_BOARD_PLACEMENTS: SampleBoardPlacement[] = [
   { row: 8, col: 1, word: 'A' },
   { row: 8, col: 2, word: 'Thing' },
   { row: 8, col: 3, word: '.' },
-  { row: 8, col: 4, word: 'Some body' },
+  { row: 8, col: 4, word: 'Somebody' },
   { row: 8, col: 5, word: 'Is' },
   { row: 8, col: 6, word: 'Not' },
   { row: 8, col: 7, word: 'Up' },
@@ -113,10 +113,10 @@ export const AUTHENTIC_2005_BOARD_PLACEMENTS: SampleBoardPlacement[] = [
   { row: 13, col: 5, word: 'Be' },
   { row: 13, col: 6, word: 'Big' },
 
-  // Can Do Some thing Is Small
+  // Can Do Something Is Small
   { row: 14, col: 0, word: 'Can' },
   { row: 14, col: 1, word: 'Do' },
-  { row: 14, col: 2, word: 'Some thing' },
+  { row: 14, col: 2, word: 'Something' },
   { row: 14, col: 3, word: 'Is' },
   { row: 14, col: 4, word: 'Small' },
 ];

@@ -176,9 +176,11 @@ export const Rack: React.FC<RackProps> = ({
               >
                 {/* Tile Word */}
                 <span
-                  className={`font-bold text-center leading-tight tracking-tight px-0.5 ${
-                    tile.word.length > 7
-                      ? 'text-[10px] sm:text-[11px]'
+                  className={`font-bold text-center leading-tight tracking-tight px-0.5 whitespace-nowrap ${
+                    tile.word.length >= 9
+                      ? 'text-[8.5px] sm:text-[9.5px] tracking-tighter'
+                      : tile.word.length > 7
+                      ? 'text-[9.5px] sm:text-[10.5px] tracking-tighter'
                       : tile.word.length > 4
                       ? 'text-xs sm:text-sm'
                       : 'text-sm sm:text-base'

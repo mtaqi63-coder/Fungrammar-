@@ -4,6 +4,7 @@ import { validateFullSequence } from './grammarValidator';
 export const BOARD_SIZE = 20;
 export const CENTER_ROW = 9;
 export const CENTER_COL = 9;
+export const EDGE_MARGIN_TILES = 3;
 
 export function createEmptyBoard(): BoardCell[][] {
   const board: BoardCell[][] = [];
@@ -14,6 +15,7 @@ export function createEmptyBoard(): BoardCell[][] {
         row: r,
         col: c,
         tile: null,
+        isCenter: r === CENTER_ROW && c === CENTER_COL,
       });
     }
     board.push(row);
@@ -21,9 +23,162 @@ export function createEmptyBoard(): BoardCell[][] {
   return board;
 }
 
+export function getBoardCenter(board: BoardCell[][]): { row: number; col: number } {
+  for (let r = 0; r < board.length; r++) {
+    for (let c = 0; c < (board[r]?.length ?? 0); c++) {
+      if (board[r][c].isCenter) return { row: r, col: c };
+    }
+  }
+  return {
+    row: Math.min(CENTER_ROW, Math.max(0, board.length - 1)),
+    col: Math.min(CENTER_COL, Math.max(0, (board[0]?.length ?? BOARD_SIZE) - 1)),
+  };
+}
+
+export function getColumnLabel(colIndex: number): string {
+  let label = '';
+  let n = colIndex;
+  while (n >= 0) {
+    label = String.fromCharCode(65 + (n % 26)) + label;
+    n = Math.floor(n / 26) - 1;
+  }
+  return label;
+}
+
+export function getVisibleBoardBounds(
+  board: BoardCell[][],
+  tempPlacements: PlacedTile[] = [],
+  isAutoExpandMode: boolean = true
+): { minRow: number; maxRow: number; minCol: number; maxCol: number } {
+  const numRows = board.length;
+  const numCols = board[0]?.length ?? BOARD_SIZE;
+
+  if (!isAutoExpandMode || numRows === 0 || numCols === 0) {
+    return {
+      minRow: 0,
+      maxRow: Math.max(0, numRows - 1),
+      minCol: 0,
+      maxCol: Math.max(0, numCols - 1),
+    };
+  }
+
+  const center = getBoardCenter(board);
+  const occupiedRows: number[] = [center.row];
+  const occupiedCols: number[] = [center.col];
+
+  for (let r = 0; r < numRows; r++) {
+    for (let c = 0; c < numCols; c++) {
+      if (board[r][c].tile) {
+        occupiedRows.push(r);
+        occupiedCols.push(c);
+      }
+    }
+  }
+
+  for (const p of tempPlacements) {
+    occupiedRows.push(p.row);
+    occupiedCols.push(p.col);
+  }
+
+  const minR = Math.min(...occupiedRows);
+  const maxR = Math.max(...occupiedRows);
+  const minC = Math.min(...occupiedCols);
+  const maxC = Math.max(...occupiedCols);
+
+  return {
+    minRow: Math.max(0, minR - EDGE_MARGIN_TILES),
+    maxRow: Math.min(numRows - 1, maxR + EDGE_MARGIN_TILES),
+    minCol: Math.max(0, minC - EDGE_MARGIN_TILES),
+    maxCol: Math.min(numCols - 1, maxC + EDGE_MARGIN_TILES),
+  };
+}
+
+/**
+ * Always expands the backing grid so there are at least `margin` empty cells
+ * on top, bottom, left, and right around every placed/pending tile and center star.
+ */
+export function ensureBoardMargin(
+  board: BoardCell[][],
+  tempPlacements: PlacedTile[] = [],
+  margin: number = EDGE_MARGIN_TILES
+): { board: BoardCell[][]; tempPlacements: PlacedTile[]; shifted: boolean; padTop: number; padLeft: number } {
+  const numRows = board.length;
+  const numCols = board[0]?.length ?? 0;
+  if (numRows === 0 || numCols === 0) {
+    return { board, tempPlacements, shifted: false, padTop: 0, padLeft: 0 };
+  }
+
+  const center = getBoardCenter(board);
+  let minR = center.row;
+  let maxR = center.row;
+  let minC = center.col;
+  let maxC = center.col;
+
+  for (let r = 0; r < numRows; r++) {
+    for (let c = 0; c < numCols; c++) {
+      if (board[r][c].tile) {
+        if (r < minR) minR = r;
+        if (r > maxR) maxR = r;
+        if (c < minC) minC = c;
+        if (c > maxC) maxC = c;
+      }
+    }
+  }
+
+  for (const p of tempPlacements) {
+    if (p.row < minR) minR = p.row;
+    if (p.row > maxR) maxR = p.row;
+    if (p.col < minC) minC = p.col;
+    if (p.col > maxC) maxC = p.col;
+  }
+
+  const padTop = Math.max(0, margin - minR);
+  const padBottom = Math.max(0, maxR + margin - (numRows - 1));
+  const padLeft = Math.max(0, margin - minC);
+  const padRight = Math.max(0, maxC + margin - (numCols - 1));
+
+  if (padTop === 0 && padBottom === 0 && padLeft === 0 && padRight === 0) {
+    return { board, tempPlacements, shifted: false, padTop: 0, padLeft: 0 };
+  }
+
+  const newRows = numRows + padTop + padBottom;
+  const newCols = numCols + padLeft + padRight;
+  const newBoard: BoardCell[][] = [];
+
+  for (let r = 0; r < newRows; r++) {
+    const newRow: BoardCell[] = [];
+    for (let c = 0; c < newCols; c++) {
+      const oldR = r - padTop;
+      const oldC = c - padLeft;
+      if (oldR >= 0 && oldR < numRows && oldC >= 0 && oldC < numCols) {
+        newRow.push({
+          ...board[oldR][oldC],
+          row: r,
+          col: c,
+        });
+      } else {
+        newRow.push({
+          row: r,
+          col: c,
+          tile: null,
+        });
+      }
+    }
+    newBoard.push(newRow);
+  }
+
+  const shiftedTemp = tempPlacements.map((p) => ({
+    ...p,
+    row: p.row + padTop,
+    col: p.col + padLeft,
+  }));
+
+  return { board: newBoard, tempPlacements: shiftedTemp, shifted: true, padTop, padLeft };
+}
+
 export function isBoardEmpty(board: BoardCell[][]): boolean {
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
+  for (let r = 0; r < board.length; r++) {
+    for (let c = 0; c < (board[r]?.length ?? 0); c++) {
       if (board[r][c].tile && !board[r][c].isTemp) {
         return false;
       }
@@ -242,6 +397,8 @@ export function validateMove(
 
   // Check 4: If board was not empty, the placed tiles must connect to an existing tile
   if (!boardWasEmpty) {
+    const numRows = board.length;
+    const numCols = board[0]?.length ?? 0;
     let connects = false;
     for (const p of placedTiles) {
       const neighbors = [
@@ -251,7 +408,7 @@ export function validateMove(
         [p.row, p.col + 1],
       ];
       for (const [nr, nc] of neighbors) {
-        if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+        if (nr >= 0 && nr < numRows && nc >= 0 && nc < numCols) {
           const neighborTile = board[nr][nc].tile;
           if (neighborTile && !board[nr][nc].isTemp) {
             connects = true;
@@ -299,7 +456,7 @@ export function validateMove(
         .join(' ');
 
       evaluatedSentences.push({
-        text: hText,
+        text: hGrammar.formattedText || hText,
         isValid: hGrammar.isValid,
         charCount: hGrammar.score,
         tiles: hSeq.tiles,
@@ -317,7 +474,7 @@ export function validateMove(
         .join(' ');
 
       evaluatedSentences.push({
-        text: vText,
+        text: vGrammar.formattedText || vText,
         isValid: vGrammar.isValid,
         charCount: vGrammar.score,
         tiles: vSeq.tiles,
@@ -347,7 +504,7 @@ export function validateMove(
       .join(' ');
 
     evaluatedSentences.push({
-      text: mainText,
+      text: mainGrammar.formattedText || mainText,
       isValid: mainGrammar.isValid,
       charCount: mainGrammar.score,
       tiles: mainSequence.tiles,
@@ -378,7 +535,7 @@ export function validateMove(
 
         if (!exists) {
           evaluatedSentences.push({
-            text: crossText,
+            text: crossGrammar.formattedText || crossText,
             isValid: crossGrammar.isValid,
             charCount: crossGrammar.score,
             tiles: crossSeq.tiles,
@@ -424,16 +581,18 @@ function extractFullWordSequence(
   direction: 'horizontal' | 'vertical'
 ): { tiles: PlacedTile[] } {
   const tiles: PlacedTile[] = [];
+  const numRows = board.length;
+  const numCols = board[0]?.length ?? 0;
 
   if (direction === 'horizontal') {
     // Walk left to find start
     let startCol = col;
-    while (startCol > 0 && board[row][startCol - 1]?.tile) {
+    while (startCol > 0 && board[row]?.[startCol - 1]?.tile) {
       startCol--;
     }
     // Walk right to find end
     let currCol = startCol;
-    while (currCol < BOARD_SIZE && board[row][currCol]?.tile) {
+    while (currCol < numCols && board[row]?.[currCol]?.tile) {
       tiles.push({
         row,
         col: currCol,
@@ -449,7 +608,7 @@ function extractFullWordSequence(
     }
     // Walk down to find end
     let currRow = startRow;
-    while (currRow < BOARD_SIZE && board[currRow]?.[col]?.tile) {
+    while (currRow < numRows && board[currRow]?.[col]?.tile) {
       tiles.push({
         row: currRow,
         col,
